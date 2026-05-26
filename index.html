@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>IRC TS-B2 — PES & descripteurs d'aromaticité (wB97XD/6-311++G(d,p))</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg: #FAFAF7; --surface: #FFFFFF; --text: #1A1A1A; --muted: #6B6B6B; --border: #E2E0DA;
+  --accent: #534AB7;
+  --min-fill: #1D9E75; --min-border: #0F6E56;
+  --ts-fill:  #D85A30; --ts-border:  #993C1D;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg:#14141A; --surface:#1E1E26; --text:#ECEAE3; --muted:#9A9892; --border:#2E2E38; --accent:#AFA9EC; }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif; font-size: 14px; line-height: 1.5;
+       max-width: 1200px; margin: 0 auto; padding: 1.5rem; }
+header h1 { font-size: 1.4rem; font-weight: 600; letter-spacing: -0.01em; margin: 0 0 0.5rem; }
+.lede { color: var(--muted); font-size: 0.95rem; margin: 0 0 1.5rem; }
+.lede code { background: var(--border); padding: 1px 4px; border-radius: 3px; font-size: 0.85em; }
+
+.toolbar { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1rem;
+           padding: 1rem; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
+.row .label { color: var(--muted); font-size: 0.8rem; margin-right: 0.5rem; min-width: 80px; text-transform: uppercase; letter-spacing: 0.05em; }
+.row .sep { color: var(--border); margin: 0 0.25rem; user-select: none; }
+.chip, .btn-desc {
+  border: 1px solid var(--border); background: transparent; color: var(--text);
+  padding: 4px 10px; border-radius: 16px; cursor: pointer; font-size: 0.82rem;
+  display: inline-flex; align-items: center; gap: 6px; user-select: none;
+  font-family: inherit;
+}
+.chip:hover, .btn-desc:hover { background: var(--border); }
+.chip[aria-pressed="true"] { border-width: 2px; padding: 3px 9px; font-weight: 500; }
+.btn-desc[aria-pressed="true"] { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 500; }
+.btn-desc[disabled] { opacity: 0.35; cursor: not-allowed; }
+.swatch { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+
+.grid { display: grid; grid-template-columns: 1.6fr 1fr; gap: 1rem; }
+@media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; }
+.chart-card { display: flex; flex-direction: column; }
+.chart-wrapper { position: relative; height: 440px; }
+.legend { margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid var(--border);
+          display: flex; flex-wrap: wrap; gap: 1rem; font-size: 0.78rem; color: var(--muted); }
+.legend-section { display: flex; flex-direction: column; gap: 4px; }
+.legend-section .heading { color: var(--text); font-weight: 600; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; }
+.legend-item { display: inline-flex; align-items: center; gap: 6px; margin-right: 0.75rem; }
+.legend-stroke { width: 24px; height: 0; border-top: 2px solid currentColor; display: inline-block; }
+
+.info-panel h2 { font-size: 1rem; margin: 0 0 0.5rem; }
+.info-panel .muted { color: var(--muted); font-size: 0.85rem; }
+.info-panel .meta { font-size: 0.85rem; margin: 0.25rem 0 0.75rem; }
+.info-panel .meta strong { color: var(--text); }
+.info-panel table { width: 100%; border-collapse: collapse; font-size: 0.78rem; margin-top: 0.5rem;
+                    font-variant-numeric: tabular-nums; }
+.info-panel th, .info-panel td { padding: 4px 6px; text-align: right; border-bottom: 1px solid var(--border); }
+.info-panel th { color: var(--muted); font-weight: 600; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.info-panel th:first-child, .info-panel td:first-child { text-align: left; color: var(--muted); }
+.info-panel tr.highlight td { background: rgba(83, 74, 183, 0.10); color: var(--text); font-weight: 500; }
+.info-panel h3 { font-size: 0.85rem; margin: 0.75rem 0 0.25rem; color: var(--muted);
+                 text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
+
+footer { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+.methods-note { font-size: 0.8rem; color: var(--muted); margin: 0; }
+.methods-note strong { color: var(--text); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>IRC TS-B2 — PES & descripteurs d'aromaticité</h1>
+  <p class="lede">
+    Intrinsic reaction coordinate (forward + reverse) au niveau <code>wB97XD/6-311++G(d,p)</code>.
+    Trois cycles analysés : <strong>A</strong> (benzénique), <strong>B</strong> (dérivé du diène), <strong>A+B</strong> (système bicyclique fusionné).
+    Cliquer sur un point stationnaire pour voir tous les descripteurs.
+  </p>
+</header>
+
+<section class="toolbar" aria-label="Contrôles de la figure">
+  <div class="row" id="cycles-row">
+    <span class="label">Cycles</span>
+  </div>
+  <div class="row" id="descriptors-row">
+    <span class="label">Descriptor</span>
+  </div>
+</section>
+
+<section class="grid">
+  <div class="card chart-card">
+    <div class="chart-wrapper">
+      <canvas id="pes-chart" aria-label="Courbe IRC d'énergie potentielle en fonction de la coordonnée de réaction, avec courbes optionnelles de descripteurs d'aromaticité par cycle.">
+        Cette figure interactive nécessite un navigateur compatible canvas.
+      </canvas>
+    </div>
+    <div class="legend" id="chart-legend"></div>
+  </div>
+  <aside class="card info-panel" id="info-panel">
+    <h2>Point stationnaire</h2>
+    <p class="muted">Clique sur un point coloré (vert pour minimum, orange pour TS) du graphique pour afficher les coordonnées et la table complète des descripteurs.</p>
+  </aside>
+</section>
+
+<footer>
+  <p class="methods-note">
+    <strong>Methods.</strong> Intrinsic Reaction Coordinate (IRC, LQA Path Following, stepsize 0.1 bohr, MaxPoints=120)
+    au niveau <strong>wB97XD/6-311++G(d,p)</strong> avec Gaussian 16, depuis un TS optimisé précédemment.
+    Énergies en kcal/mol référencées au réactif (s ≈ −7.51 amu<sup>½</sup>·bohr, ΔE = 0).
+    Coordonnée de réaction <em>s</em> en amu<sup>½</sup>·bohr (convention IUPAC pour IRC en masse-pondérée).
+    Les courbes de descripteurs sont des interpolations linéaires entre 3 points stationnaires (réactif, TS, produit) ;
+    elles indiquent la tendance mais n'ont pas de valeur prédictive entre points.
+    HOMA: Krygowski R<sub>opt</sub>=1.3913 Å. LDM &amp; Q family: Pilmé &amp; Spezia (2026). S-hom: indice d'homogénéité électronique.
+    Le suffixe <em>(G)</em> indique une grandeur globale (indépendante du cycle considéré).
+  </p>
+</footer>
+
+<script>
+(() => {
+'use strict';
+
+// ============================================================
+// 1) PALETTE
+// ============================================================
+const mode = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+const cycleColors = {
+  A:  { light: '#185FA5', dark: '#85B7EB' },  // bleu  (benzénique)
+  B:  { light: '#BA7517', dark: '#FAC775' },  // ambre (diène)
+  AB: { light: '#993556', dark: '#ED93B1' },  // rose  (fusionné)
+};
+const pesColor   = { light: '#534AB7', dark: '#AFA9EC' };  // violet (méthode unique)
+const minColor   = { fill: '#1D9E75', border: '#0F6E56' };
+const tsColor    = { fill: '#D85A30', border: '#993C1D' };
+const c = (obj) => obj[mode];
+
+// ============================================================
+// 2) DATA — IRC (s en amu^½·bohr, E en Hartree)
+//    Concaténation: reverse points (avec s négatif) + TS + forward points
+// ============================================================
+const HARTREE_TO_KCAL = 627.5094740631;
+
+const IRC_FORWARD = [
+  {n:0,  s: 0.00000, E:-592.636894940},
+  {n:1,  s: 0.27814, E:-592.637354578},
+  {n:2,  s: 0.55621, E:-592.638686933},
+  {n:3,  s: 0.83426, E:-592.640768890},
+  {n:4,  s: 1.11233, E:-592.643493340},
+  {n:5,  s: 1.39036, E:-592.646758747},
+  {n:6,  s: 1.66842, E:-592.650502247},
+  {n:7,  s: 1.94649, E:-592.654669546},
+  {n:8,  s: 2.22460, E:-592.659211738},
+  {n:9,  s: 2.50274, E:-592.664062119},
+  {n:10, s: 2.78090, E:-592.669133723},
+  {n:11, s: 3.05907, E:-592.674316885},
+  {n:12, s: 3.33724, E:-592.679477643},
+  {n:13, s: 3.61540, E:-592.684459256},
+  {n:14, s: 3.89346, E:-592.689083894},
+  {n:15, s: 4.17148, E:-592.693174760},
+  {n:16, s: 4.44925, E:-592.696555965},
+  {n:17, s: 4.72639, E:-592.699112467},
+];
+const IRC_REVERSE = [
+  {n:0,  s: 0.00000, E:-592.636894940},
+  {n:1,  s: 0.27819, E:-592.637363749},
+  {n:2,  s: 0.55633, E:-592.638749729},
+  {n:3,  s: 0.83449, E:-592.640970989},
+  {n:4,  s: 1.11267, E:-592.643870482},
+  {n:5,  s: 1.39085, E:-592.647219919},
+  {n:6,  s: 1.66903, E:-592.650819527},
+  {n:7,  s: 1.94720, E:-592.654479316},
+  {n:8,  s: 2.22537, E:-592.658168468},
+  {n:9,  s: 2.50355, E:-592.661723164},
+  {n:10, s: 2.78173, E:-592.665108614},
+  {n:11, s: 3.05992, E:-592.668292565},
+  {n:12, s: 3.33811, E:-592.671297217},
+  {n:13, s: 3.61630, E:-592.674036892},
+  {n:14, s: 3.89449, E:-592.676565098},
+  {n:15, s: 4.17266, E:-592.678882204},
+  {n:16, s: 4.45077, E:-592.680982755},
+  {n:17, s: 4.72867, E:-592.682888080},
+  {n:18, s: 5.00641, E:-592.684614479},
+  {n:19, s: 5.28438, E:-592.686165860},
+  {n:20, s: 5.56250, E:-592.687544407},
+  {n:21, s: 5.84058, E:-592.688769049},
+  {n:22, s: 6.11859, E:-592.689845549},
+  {n:23, s: 6.39642, E:-592.690784180},
+  {n:24, s: 6.67428, E:-592.691605056},
+  {n:25, s: 6.95212, E:-592.692323176},
+  {n:26, s: 7.23017, E:-592.692928647},
+  {n:27, s: 7.50822, E:-592.693443758},
+];
+
+// Reactant = endpoint reverse (most stable on left side)
+// TS       = s = 0
+// Product  = endpoint forward (most stable on right side)
+const E_REACT = IRC_REVERSE[IRC_REVERSE.length-1].E;  // référence
+
+// Build full PES: reverse with negative s (skip n=0 duplicate of TS), then TS, then forward.
+const pesPoints = [];
+for (let i = IRC_REVERSE.length - 1; i >= 1; i--) {
+  pesPoints.push({ s: -IRC_REVERSE[i].s, dE: (IRC_REVERSE[i].E - E_REACT) * HARTREE_TO_KCAL });
+}
+pesPoints.push({ s: 0, dE: (IRC_FORWARD[0].E - E_REACT) * HARTREE_TO_KCAL });  // TS
+for (let i = 1; i < IRC_FORWARD.length; i++) {
+  pesPoints.push({ s: IRC_FORWARD[i].s, dE: (IRC_FORWARD[i].E - E_REACT) * HARTREE_TO_KCAL });
+}
+
+const STATIONARY = [
+  { key: 'Reactant', s: -IRC_REVERSE[IRC_REVERSE.length-1].s, dE: 0.0,
+    role: 'separated reactants (end of reverse IRC)' },
+  { key: 'TS',       s: 0.0,
+    dE: (IRC_FORWARD[0].E - E_REACT) * HARTREE_TO_KCAL,
+    role: 'transition state (start of IRC)' },
+  { key: 'Product',  s: IRC_FORWARD[IRC_FORWARD.length-1].s,
+    dE: (IRC_FORWARD[IRC_FORWARD.length-1].E - E_REACT) * HARTREE_TO_KCAL,
+    role: 'cycloadduct (end of forward IRC)' },
+];
+
+// ============================================================
+// 3) DATA — Descriptors (par point stationnaire × cycle)
+// ============================================================
+const CYCLES = ['A', 'B', 'AB'];
+const CYCLE_LABELS = { A: 'Cycle A', B: 'Cycle B', AB: 'Cycle A+B' };
+
+const DESC = {
+  Reactant: {
+    A:  { EN: 0.002278, GEO: 0.000831, HOMA: 0.996891,
+          LDM_OffDiag: 0.488407, LDM_Diag: 1.408190, LDM_Frob: 1.490483, LDM_RMSD: 0.248414, LDM_CT: -9.635000,
+          Q_Frob: 0.285644, Q_RMSD: 0.052151, S_hom: 0.430655 },
+    B:  { EN: 77.718952, GEO: 161.263980, HOMA: -237.982933,
+          LDM_OffDiag: 1.393103, LDM_Diag: 1.307041, LDM_Frob: 1.910259, LDM_RMSD: 0.318377, LDM_CT: -16.113889,
+          Q_Frob: 0.596579, Q_RMSD: 0.108920, S_hom: 0.176626 },
+    AB: { EN: 27.857633, GEO: 115.532518, HOMA: -142.390151,
+          LDM_OffDiag: 1.432771, LDM_Diag: 1.681366, LDM_Frob: 2.209033, LDM_RMSD: 0.220903, LDM_CT: -10.432333,
+          Q_Frob: 0.702202, Q_RMSD: 0.074019, S_hom: 0.142581 },
+    _global: { HOMA_TOTAL: -129.355353, Q_G: 0.086272, S_hom_G: 0.148355, S_G: 0.182870 },
+  },
+  TS: {
+    A:  { EN: 0.055198, GEO: 0.279339, HOMA: 0.665463,
+          LDM_OffDiag: 0.581051, LDM_Diag: 1.446404, LDM_Frob: 1.558751, LDM_RMSD: 0.259792, LDM_CT: -11.517778,
+          Q_Frob: 0.350874, Q_RMSD: 0.064061, S_hom: 0.360890 },
+    B:  { EN: 10.848948, GEO: 23.809816, HOMA: -33.658764,
+          LDM_OffDiag: 0.903100, LDM_Diag: 1.402862, LDM_Frob: 1.668416, LDM_RMSD: 0.278069, LDM_CT: -15.994167,
+          Q_Frob: 0.417905, Q_RMSD: 0.076299, S_hom: 0.264980 },
+    AB: { EN: 3.972477, GEO: 16.946471, HOMA: -19.918948,
+          LDM_OffDiag: 1.002252, LDM_Diag: 1.756812, LDM_Frob: 2.022597, LDM_RMSD: 0.202260, LDM_CT: -10.603833,
+          Q_Frob: 0.558456, Q_RMSD: 0.058866, S_hom: 0.183233 },
+    _global: { HOMA_TOTAL: -18.052241, Q_G: 0.083981, S_hom_G: 0.151298, S_G: 0.194504 },
+  },
+  Product: {
+    A:  { EN: 0.464675, GEO: 1.146192, HOMA: -0.610867,
+          LDM_OffDiag: 0.743596, LDM_Diag: 1.431326, LDM_Frob: 1.612957, LDM_RMSD: 0.268826, LDM_CT: -12.460278,
+          Q_Frob: 0.480486, Q_RMSD: 0.087724, S_hom: 0.322855 },
+    B:  { EN: 1.772752, GEO: 0.978841, HOMA: -1.751593,
+          LDM_OffDiag: 0.691470, LDM_Diag: 1.445339, LDM_Frob: 1.602228, LDM_RMSD: 0.267038, LDM_CT: -15.248611,
+          Q_Frob: 0.419819, Q_RMSD: 0.076648, S_hom: 0.298223 },
+    AB: { EN: 0.646490, GEO: 1.155613, HOMA: -0.802103,
+          LDM_OffDiag: 0.922915, LDM_Diag: 1.775043, LDM_Frob: 2.000637, LDM_RMSD: 0.200064, LDM_CT: -10.500000,
+          Q_Frob: 0.632865, Q_RMSD: 0.066710, S_hom: 0.188640 },
+    _global: { HOMA_TOTAL: -1.008900, Q_G: 0.084842, S_hom_G: 0.145798, S_G: 0.189495 },
+  },
+};
+
+// Descripteurs : { key, label, family, global? }
+const DESCRIPTORS = [
+  { key:'HOMA',        label:'HOMA',         family:'HOMA' },
+  { key:'EN',          label:'EN',           family:'HOMA' },
+  { key:'GEO',         label:'GEO',          family:'HOMA' },
+  { key:'LDM_Frob',    label:'LDM Frob Full', family:'LDM' },
+  { key:'LDM_RMSD',    label:'LDM RMSD',      family:'LDM' },
+  { key:'LDM_CT',      label:'LDM CT %',      family:'LDM' },
+  { key:'LDM_OffDiag', label:'LDM Off Diag',  family:'LDM' },
+  { key:'LDM_Diag',    label:'LDM Diag',      family:'LDM' },
+  { key:'Q_Frob',      label:'Q Frob',        family:'Q' },
+  { key:'Q_RMSD',      label:'Q RMSD',        family:'Q' },
+  { key:'S_hom',       label:'S-hom',         family:'S' },
+  { key:'HOMA_TOTAL',  label:'HOMA total',    family:'Global', global:true },
+  { key:'Q_G',         label:'Q (G)',         family:'Global', global:true },
+  { key:'S_hom_G',     label:'S-hom (G)',     family:'Global', global:true },
+  { key:'S_G',         label:'S (G)',         family:'Global', global:true },
+];
+
+const FAMILY_ORDER = ['HOMA','LDM','Q','S','Global'];
+
+// ============================================================
+// 4) STATE
+// ============================================================
+const state = {
+  cycles:     new Set(['A', 'B', 'AB']),
+  descriptor: null,        // descriptor key or null
+  selectedSP: null,        // 'Reactant'|'TS'|'Product'|null
+};
+
+// ============================================================
+// 5) UI: toolbar
+// ============================================================
+function buildToolbar() {
+  // Cycles
+  const cyclesRow = document.getElementById('cycles-row');
+  CYCLES.forEach(cy => {
+    const btn = document.createElement('button');
+    btn.className = 'chip';
+    btn.setAttribute('aria-pressed', state.cycles.has(cy));
+    btn.style.borderColor = c(cycleColors[cy]);
+    btn.innerHTML = `<span class="swatch" style="background:${c(cycleColors[cy])}"></span>${CYCLE_LABELS[cy]}`;
+    btn.addEventListener('click', () => {
+      if (state.cycles.has(cy)) state.cycles.delete(cy);
+      else state.cycles.add(cy);
+      btn.setAttribute('aria-pressed', state.cycles.has(cy));
+      render();
+    });
+    cyclesRow.appendChild(btn);
+  });
+
+  // Descriptors
+  const descRow = document.getElementById('descriptors-row');
+  FAMILY_ORDER.forEach((fam, fi) => {
+    if (fi > 0) {
+      const sep = document.createElement('span');
+      sep.className = 'sep'; sep.textContent = '|';
+      descRow.appendChild(sep);
+    }
+    const famLabel = document.createElement('span');
+    famLabel.style.color = 'var(--muted)';
+    famLabel.style.fontSize = '0.75rem';
+    famLabel.style.marginRight = '0.2rem';
+    famLabel.textContent = fam + ':';
+    descRow.appendChild(famLabel);
+
+    DESCRIPTORS.filter(d => d.family === fam).forEach(d => {
+      const btn = document.createElement('button');
+      btn.className = 'btn-desc';
+      btn.setAttribute('aria-pressed', state.descriptor === d.key);
+      btn.textContent = d.label;
+      btn.dataset.key = d.key;
+      btn.addEventListener('click', () => {
+        state.descriptor = (state.descriptor === d.key) ? null : d.key;
+        document.querySelectorAll('.btn-desc').forEach(b =>
+          b.setAttribute('aria-pressed', b.dataset.key === state.descriptor));
+        // Grey out cycle chips when global descriptor active
+        const isGlobal = state.descriptor &&
+          DESCRIPTORS.find(x => x.key === state.descriptor).global;
+        cyclesRow.querySelectorAll('.chip').forEach(ch => ch.style.opacity = isGlobal ? '0.4' : '1');
+        render();
+      });
+      descRow.appendChild(btn);
+    });
+  });
+}
+
+// ============================================================
+// 6) CHART
+// ============================================================
+let chart;
+function initChart() {
+  const ctx = document.getElementById('pes-chart').getContext('2d');
+  chart = new Chart(ctx, {
+    type: 'line',
+    data: { datasets: [] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      animation: { duration: 200 },
+      interaction: { mode: 'nearest', axis: 'xy', intersect: false },
+      scales: {
+        x: { type: 'linear',
+             min: Math.floor(pesPoints[0].s) - 0.5,
+             max: Math.ceil(pesPoints[pesPoints.length-1].s) + 0.5,
+             title: { display: true, text: 'Reaction coordinate s (amu½·bohr)' },
+             grid: { color: 'rgba(127,127,127,0.12)' } },
+        y: { position: 'left',
+             title: { display: true, text: 'ΔE (kcal mol⁻¹, ref. Reactant)' },
+             grid: { color: 'rgba(127,127,127,0.12)' } },
+        y1:{ position: 'right', display: false,
+             grid: { drawOnChartArea: false }, title: { display: true, text: '' } },
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => ctx.dataset._tooltip ? ctx.dataset._tooltip(ctx) : `${ctx.parsed.y.toFixed(3)}`,
+          },
+        },
+      },
+      onClick: handleChartClick,
+    },
+  });
+}
+
+function handleChartClick(evt, items) {
+  if (!items.length) return;
+  const it = items[0];
+  const ds = chart.data.datasets[it.datasetIndex];
+  if (ds._stationary) {
+    state.selectedSP = ds._stationary[it.index];
+    updateInfoPanel();
+  }
+}
+
+// ============================================================
+// 7) RENDER
+// ============================================================
+function render() {
+  const datasets = [];
+
+  // -- PES (Y gauche) --
+  datasets.push({
+    label: 'PES (IRC)',
+    data: pesPoints.map(p => ({ x: p.s, y: p.dE })),
+    borderColor: c(pesColor),
+    backgroundColor: c(pesColor),
+    borderWidth: 2, pointRadius: 0, pointHoverRadius: 4,
+    tension: 0.25, yAxisID: 'y',
+    _tooltip: (ctx) => `IRC : s = ${ctx.parsed.x.toFixed(3)} | ΔE = ${ctx.parsed.y.toFixed(3)} kcal/mol`,
+  });
+
+  // -- Stationary points --
+  datasets.push({
+    label: 'Stationary points',
+    data: STATIONARY.map(sp => ({ x: sp.s, y: sp.dE })),
+    pointStyle: 'circle', pointRadius: 8, pointHoverRadius: 10, showLine: false,
+    backgroundColor: STATIONARY.map(sp => sp.key === 'TS' ? tsColor.fill : minColor.fill),
+    borderColor:     STATIONARY.map(sp => sp.key === 'TS' ? tsColor.border : minColor.border),
+    borderWidth: 2, yAxisID: 'y',
+    _stationary: STATIONARY.map(sp => sp.key),
+    _tooltip: (ctx) => {
+      const sp = STATIONARY[ctx.dataIndex];
+      return `${sp.key} | s = ${sp.s.toFixed(3)} | ΔE = ${sp.dE.toFixed(3)} kcal/mol | ${sp.role}`;
+    },
+  });
+
+  // -- Descriptor curves (Y droit) --
+  const y1 = chart.options.scales.y1;
+  if (state.descriptor) {
+    const d = DESCRIPTORS.find(x => x.key === state.descriptor);
+    y1.display = true;
+    y1.title.text = d.label + (d.global ? '' : ' (per cycle)');
+    if (d.global) addGlobalDescDataset(datasets, d);
+    else addPerCycleDescDatasets(datasets, d);
+  } else {
+    y1.display = false;
+  }
+
+  chart.data.datasets = datasets;
+  chart.update();
+  buildLegend();
+}
+
+function addPerCycleDescDatasets(datasets, d) {
+  state.cycles.forEach(cy => {
+    const data = STATIONARY.map(sp => ({ x: sp.s, y: DESC[sp.key][cy][d.key] }));
+    datasets.push({
+      label: `${d.label} · ${CYCLE_LABELS[cy]}`,
+      data,
+      borderColor: c(cycleColors[cy]),
+      backgroundColor: c(cycleColors[cy]),
+      borderDash: [3, 3],
+      pointStyle: 'circle',
+      pointRadius: 6, pointHoverRadius: 8,
+      borderWidth: 1.5, yAxisID: 'y1',
+      _tooltip: (ctx) => {
+        const sp = STATIONARY[ctx.dataIndex];
+        return `${CYCLE_LABELS[cy]} · ${d.label} = ${ctx.parsed.y.toFixed(3)} (at ${sp.key})`;
+      },
+    });
+  });
+}
+
+function addGlobalDescDataset(datasets, d) {
+  const data = STATIONARY.map(sp => ({ x: sp.s, y: DESC[sp.key]._global[d.key] }));
+  datasets.push({
+    label: d.label,
+    data,
+    borderColor: c(pesColor),
+    backgroundColor: c(pesColor),
+    borderDash: [3, 3],
+    pointStyle: 'circle',
+    pointRadius: 6, pointHoverRadius: 8,
+    borderWidth: 1.5, yAxisID: 'y1',
+    _tooltip: (ctx) => {
+      const sp = STATIONARY[ctx.dataIndex];
+      return `${d.label} = ${ctx.parsed.y.toFixed(3)} (at ${sp.key})`;
+    },
+  });
+}
+
+// ============================================================
+// 8) LEGEND
+// ============================================================
+function buildLegend() {
+  const root = document.getElementById('chart-legend');
+  root.innerHTML = '';
+
+  // PES section
+  const pesSec = document.createElement('div');
+  pesSec.className = 'legend-section';
+  pesSec.innerHTML = `<span class="heading">PES (left)</span>
+    <span class="legend-item" style="color:${c(pesColor)}"><span class="legend-stroke"></span>
+      <span style="color:var(--text)">wB97XD/6-311++G(d,p)</span></span>`;
+  root.appendChild(pesSec);
+
+  // Stationary points
+  const spSec = document.createElement('div');
+  spSec.className = 'legend-section';
+  spSec.innerHTML = `<span class="heading">Stationary points</span>
+    <span class="legend-item"><span class="swatch" style="background:${minColor.fill};border:2px solid ${minColor.border}"></span>Reactant / Product (minima)</span>
+    <span class="legend-item"><span class="swatch" style="background:${tsColor.fill};border:2px solid ${tsColor.border}"></span>TS</span>`;
+  root.appendChild(spSec);
+
+  if (state.descriptor) {
+    const d = DESCRIPTORS.find(x => x.key === state.descriptor);
+    const dSec = document.createElement('div');
+    dSec.className = 'legend-section';
+    dSec.innerHTML = `<span class="heading">${d.label} (right)</span>`;
+    if (d.global) {
+      const it = document.createElement('span');
+      it.className = 'legend-item';
+      it.style.color = c(pesColor);
+      it.innerHTML = `<span class="legend-stroke" style="border-top-style:dashed"></span><span style="color:var(--text)">global</span>`;
+      dSec.appendChild(it);
+    } else {
+      CYCLES.forEach(cy => {
+        if (!state.cycles.has(cy)) return;
+        const it = document.createElement('span');
+        it.className = 'legend-item';
+        it.style.color = c(cycleColors[cy]);
+        it.innerHTML = `<span class="legend-stroke" style="border-top-style:dashed"></span><span style="color:var(--text)">${CYCLE_LABELS[cy]}</span>`;
+        dSec.appendChild(it);
+      });
+    }
+    root.appendChild(dSec);
+  }
+}
+
+// ============================================================
+// 9) INFO PANEL
+// ============================================================
+function updateInfoPanel() {
+  const panel = document.getElementById('info-panel');
+  if (!state.selectedSP) {
+    panel.innerHTML = `<h2>Point stationnaire</h2>
+      <p class="muted">Clique sur un point coloré du graphique.</p>`;
+    return;
+  }
+  const sp = STATIONARY.find(x => x.key === state.selectedSP);
+  const data = DESC[sp.key];
+  const active = state.descriptor;
+  const isGlobal = active && DESCRIPTORS.find(x => x.key === active).global;
+
+  let html = `<h2>${sp.key}</h2>
+    <p class="meta"><strong>s</strong> = ${sp.s.toFixed(3)} amu<sup>½</sup>·bohr &nbsp;
+       <strong>ΔE</strong> = ${sp.dE.toFixed(3)} kcal/mol &nbsp;
+       <em style="color:var(--muted)">${sp.role}</em></p>`;
+
+  // HOMA decomposition
+  html += `<h3>HOMA decomposition</h3>
+    <table><thead><tr><th>Cycle</th><th>HOMA</th><th>EN</th><th>GEO</th></tr></thead><tbody>`;
+  CYCLES.forEach(cy => {
+    const hl = (['HOMA','EN','GEO'].includes(active) && !isGlobal) ? ' class="highlight"' : '';
+    html += `<tr${hl}><td>${CYCLE_LABELS[cy]}</td>
+             <td>${data[cy].HOMA.toFixed(3)}</td>
+             <td>${data[cy].EN.toFixed(3)}</td>
+             <td>${data[cy].GEO.toFixed(3)}</td></tr>`;
+  });
+  html += `</tbody></table>`;
+
+  // LDM descriptors
+  html += `<h3>LDM descriptors</h3>
+    <table><thead><tr><th>Descriptor</th><th>A</th><th>B</th><th>A+B</th></tr></thead><tbody>`;
+  ['LDM_Frob','LDM_RMSD','LDM_CT','LDM_OffDiag','LDM_Diag','Q_Frob','Q_RMSD','S_hom'].forEach(k => {
+    const d = DESCRIPTORS.find(x => x.key === k);
+    const hl = (active === k && !isGlobal) ? ' class="highlight"' : '';
+    html += `<tr${hl}><td>${d.label}</td>
+             <td>${data.A[k].toFixed(3)}</td>
+             <td>${data.B[k].toFixed(3)}</td>
+             <td>${data.AB[k].toFixed(3)}</td></tr>`;
+  });
+  html += `</tbody></table>`;
+
+  // Global descriptors
+  html += `<h3>Global descriptors</h3>
+    <table><thead><tr><th>Descriptor</th><th>Value</th></tr></thead><tbody>`;
+  ['HOMA_TOTAL','Q_G','S_hom_G','S_G'].forEach(k => {
+    const d = DESCRIPTORS.find(x => x.key === k);
+    const hl = (active === k) ? ' class="highlight"' : '';
+    html += `<tr${hl}><td>${d.label}</td><td>${data._global[k].toFixed(3)}</td></tr>`;
+  });
+  html += `</tbody></table>`;
+
+  panel.innerHTML = html;
+}
+
+// ============================================================
+// 10) BOOT
+// ============================================================
+buildToolbar();
+initChart();
+render();
+
+})();
+</script>
+</body>
+</html>
