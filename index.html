@@ -77,7 +77,9 @@ footer { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--bord
   <p class="lede">
     Intrinsic reaction coordinate (forward + reverse) au niveau <code>wB97XD/6-311++G(d,p)</code>.
     Trois cycles analysés : <strong>A</strong> (benzénique), <strong>B</strong> (dérivé du diène), <strong>A+B</strong> (système bicyclique fusionné).
-    Cliquer sur un point stationnaire pour voir tous les descripteurs.
+    Points principaux <strong>Reactant / TS / Product</strong> (gros marqueurs verts/orange) + 6 points intermédiaires
+    <strong>Points 1–6</strong> (petits marqueurs bleu-violet, descripteurs B3LYP/6-311+G(d,p) recalculés sur géométries IRC).
+    Cliquer sur n'importe quel point pour voir tous ses descripteurs.
   </p>
 </header>
 
@@ -111,8 +113,10 @@ footer { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--bord
     au niveau <strong>wB97XD/6-311++G(d,p)</strong> avec Gaussian 16, depuis un TS optimisé précédemment.
     Énergies en kcal/mol référencées au réactif (s ≈ −7.51 amu<sup>½</sup>·bohr, ΔE = 0).
     Coordonnée de réaction <em>s</em> en amu<sup>½</sup>·bohr (convention IUPAC pour IRC en masse-pondérée).
-    Les courbes de descripteurs sont des interpolations linéaires entre 3 points stationnaires (réactif, TS, produit) ;
+    Les courbes de descripteurs sont des interpolations linéaires entre 9 points calculés (Reactant, Points 1–3, TS, Points 4–6, Product) ;
     elles indiquent la tendance mais n'ont pas de valeur prédictive entre points.
+    Points intermédiaires : descripteurs calculés au niveau <strong>B3LYP/6-311+G(d,p)</strong> sur géométries IRC sélectionnées
+    (P1 ≈ Reactant, P2 → reverse n=20, P3 → reverse n=8, P4 → forward n=6, P5 → forward n=13, P6 ≈ Product un peu plus relaxé).
     HOMA: Krygowski R<sub>opt</sub>=1.3913 Å. LDM &amp; Q family: Pilmé &amp; Spezia (2026). S-hom: indice d'homogénéité électronique.
     Le suffixe <em>(G)</em> indique une grandeur globale (indépendante du cycle considéré).
   </p>
@@ -134,6 +138,9 @@ const cycleColors = {
 const pesColor   = { light: '#534AB7', dark: '#AFA9EC' };  // violet (méthode unique)
 const minColor   = { fill: '#1D9E75', border: '#0F6E56' };
 const tsColor    = { fill: '#D85A30', border: '#993C1D' };
+// Couleur des 6 points intermédiaires (entre Reactant/TS/Product)
+const intColor   = { fill:   { light: '#9F92C8', dark: '#A0AED2' },
+                     border: { light: '#6B5B9A', dark: '#7686A8' } };
 const c = (obj) => obj[mode];
 
 // ============================================================
@@ -208,14 +215,35 @@ for (let i = 1; i < IRC_FORWARD.length; i++) {
   pesPoints.push({ s: IRC_FORWARD[i].s, dE: (IRC_FORWARD[i].E - E_REACT) * HARTREE_TO_KCAL });
 }
 
+// Énergies des 6 points intermédiaires (single-points fournis avec les descripteurs)
+const E_POINT = {
+  P1: -592.693449, P2: -592.687551, P3: -592.658170,
+  P4: -592.650505, P5: -592.684461, P6: -592.700926,
+};
+const _dE = (E) => (E - E_REACT) * HARTREE_TO_KCAL;
+
+// Tableau sorted by s (coordonnée de réaction). Points 1-3 entre Reactant et TS, Points 4-6 entre TS et Product.
+// Les s des points intermédiaires sont matchés aux énergies sur la courbe IRC existante (sauf P1 ≈ Reactant et P6 ≈ Product).
 const STATIONARY = [
   { key: 'Reactant', s: -IRC_REVERSE[IRC_REVERSE.length-1].s, dE: 0.0,
     role: 'separated reactants (end of reverse IRC)' },
+  { key: 'Point 1',  s: -7.00,  dE: _dE(E_POINT.P1),
+    role: 'reactant well (E ≈ Reactant, géométrie distincte)', intermediate: true },
+  { key: 'Point 2',  s: -5.562, dE: _dE(E_POINT.P2),
+    role: 'reactant side (match IRC reverse n=20)', intermediate: true },
+  { key: 'Point 3',  s: -2.225, dE: _dE(E_POINT.P3),
+    role: 'pre-TS (match IRC reverse n=8)', intermediate: true },
   { key: 'TS',       s: 0.0,
-    dE: (IRC_FORWARD[0].E - E_REACT) * HARTREE_TO_KCAL,
+    dE: _dE(IRC_FORWARD[0].E),
     role: 'transition state (start of IRC)' },
+  { key: 'Point 4',  s: 1.668,  dE: _dE(E_POINT.P4),
+    role: 'post-TS (match IRC forward n=6)', intermediate: true },
+  { key: 'Point 5',  s: 3.615,  dE: _dE(E_POINT.P5),
+    role: 'approaching Product (match IRC forward n=13)', intermediate: true },
+  { key: 'Point 6',  s: 4.400,  dE: _dE(E_POINT.P6),
+    role: 'product well (légèrement plus stable que Product)', intermediate: true },
   { key: 'Product',  s: IRC_FORWARD[IRC_FORWARD.length-1].s,
-    dE: (IRC_FORWARD[IRC_FORWARD.length-1].E - E_REACT) * HARTREE_TO_KCAL,
+    dE: _dE(IRC_FORWARD[IRC_FORWARD.length-1].E),
     role: 'cycloadduct (end of forward IRC)' },
 ];
 
@@ -261,6 +289,79 @@ const DESC = {
           LDM_OffDiag: 0.922915, LDM_Diag: 1.775043, LDM_Frob: 2.000637, LDM_RMSD: 0.200064, LDM_CT: -10.500000,
           Q_Frob: 0.632865, Q_RMSD: 0.066710, S_hom: 0.188640 },
     _global: { HOMA_TOTAL: -1.008900, Q_G: 0.084842, S_hom_G: 0.145798, S_G: 0.189495 },
+  },
+  // -- Intermediate Points (PDF "DA" — B3LYP/6-311+G(d,p)) --
+  'Point 1': {
+    A:  { EN: 0.003, GEO: 0.002, HOMA: 0.995,
+          LDM_OffDiag: 0.485, LDM_Diag: 1.428, LDM_Frob: 1.508, LDM_RMSD: 0.251, LDM_CT: -9.873,
+          Q_Frob: 0.282, Q_RMSD: 0.051, S_hom: 0.428 },
+    B:  { EN: 49.389, GEO: 104.221, HOMA: -152.610,
+          LDM_OffDiag: 1.367, LDM_Diag: 1.331, LDM_Frob: 1.908, LDM_RMSD: 0.318, LDM_CT: -16.229,
+          Q_Frob: 0.606, Q_RMSD: 0.111, S_hom: 0.181 },
+    AB: { EN: 17.681, GEO: 74.486, HOMA: -91.167,
+          LDM_OffDiag: 1.403, LDM_Diag: 1.711, LDM_Frob: 2.213, LDM_RMSD: 0.221, LDM_CT: -10.495,
+          Q_Frob: 0.705, Q_RMSD: 0.074, S_hom: 0.147 },
+    _global: { HOMA_TOTAL: -82.789, Q_G: 0.086, S_hom_G: 0.149, S_G: 0.184 },
+  },
+  'Point 2': {
+    A:  { EN: 0.004, GEO: 0.006, HOMA: 0.991,
+          LDM_OffDiag: 0.485, LDM_Diag: 1.439, LDM_Frob: 1.518, LDM_RMSD: 0.253, LDM_CT: -10.023,
+          Q_Frob: 0.281, Q_RMSD: 0.051, S_hom: 0.423 },
+    B:  { EN: 36.527, GEO: 78.672, HOMA: -114.198,
+          LDM_OffDiag: 1.343, LDM_Diag: 1.348, LDM_Frob: 1.903, LDM_RMSD: 0.317, LDM_CT: -16.251,
+          Q_Frob: 0.613, Q_RMSD: 0.112, S_hom: 0.186 },
+    AB: { EN: 13.093, GEO: 56.028, HOMA: -68.120,
+          LDM_OffDiag: 1.380, LDM_Diag: 1.726, LDM_Frob: 2.210, LDM_RMSD: 0.221, LDM_CT: -10.529,
+          Q_Frob: 0.708, Q_RMSD: 0.075, S_hom: 0.150 },
+    _global: { HOMA_TOTAL: -61.839, Q_G: 0.086, S_hom_G: 0.150, S_G: 0.185 },
+  },
+  'Point 3': {
+    A:  { EN: 0.000, GEO: 0.050, HOMA: 0.950,
+          LDM_OffDiag: 0.499, LDM_Diag: 1.451, LDM_Frob: 1.535, LDM_RMSD: 0.256, LDM_CT: -10.561,
+          Q_Frob: 0.289, Q_RMSD: 0.053, S_hom: 0.401 },
+    B:  { EN: 17.905, GEO: 40.920, HOMA: -57.826,
+          LDM_OffDiag: 1.200, LDM_Diag: 1.379, LDM_Frob: 1.828, LDM_RMSD: 0.305, LDM_CT: -16.136,
+          Q_Frob: 0.572, Q_RMSD: 0.104, S_hom: 0.213 },
+    AB: { EN: 6.472, GEO: 28.853, HOMA: -34.325,
+          LDM_OffDiag: 1.246, LDM_Diag: 1.748, LDM_Frob: 2.146, LDM_RMSD: 0.215, LDM_CT: -10.537,
+          Q_Frob: 0.665, Q_RMSD: 0.070, S_hom: 0.163 },
+    _global: { HOMA_TOTAL: -31.114, Q_G: 0.086, S_hom_G: 0.151, S_G: 0.189 },
+  },
+  'Point 4': {
+    A:  { EN: 0.194, GEO: 0.604, HOMA: 0.201,
+          LDM_OffDiag: 0.664, LDM_Diag: 1.441, LDM_Frob: 1.586, LDM_RMSD: 0.264, LDM_CT: -12.071,
+          Q_Frob: 0.417, Q_RMSD: 0.076, S_hom: 0.338 },
+    B:  { EN: 7.276, GEO: 13.852, HOMA: -20.128,
+          LDM_OffDiag: 0.756, LDM_Diag: 1.415, LDM_Frob: 1.604, LDM_RMSD: 0.267, LDM_CT: -15.810,
+          Q_Frob: 0.380, Q_RMSD: 0.069, S_hom: 0.293 },
+    AB: { EN: 2.673, GEO: 10.175, HOMA: -11.849,
+          LDM_OffDiag: 0.919, LDM_Diag: 1.758, LDM_Frob: 1.984, LDM_RMSD: 0.198, LDM_CT: -10.631,
+          Q_Frob: 0.566, Q_RMSD: 0.060, S_hom: 0.191 },
+    _global: { HOMA_TOTAL: -10.820, Q_G: 0.084, S_hom_G: 0.150, S_G: 0.194 },
+  },
+  'Point 5': {
+    A:  { EN: 0.422, GEO: 0.994, HOMA: -0.416,
+          LDM_OffDiag: 0.725, LDM_Diag: 1.432, LDM_Frob: 1.605, LDM_RMSD: 0.268, LDM_CT: -12.351,
+          Q_Frob: 0.465, Q_RMSD: 0.085, S_hom: 0.327 },
+    B:  { EN: 3.785, GEO: 4.022, HOMA: -6.807,
+          LDM_OffDiag: 0.706, LDM_Diag: 1.433, LDM_Frob: 1.597, LDM_RMSD: 0.266, LDM_CT: -15.543,
+          Q_Frob: 0.411, Q_RMSD: 0.075, S_hom: 0.301 },
+    AB: { EN: 1.404, GEO: 3.436, HOMA: -3.840,
+          LDM_OffDiag: 0.918, LDM_Diag: 1.764, LDM_Frob: 1.989, LDM_RMSD: 0.199, LDM_CT: -10.585,
+          Q_Frob: 0.616, Q_RMSD: 0.065, S_hom: 0.191 },
+    _global: { HOMA_TOTAL: -3.715, Q_G: 0.084, S_hom_G: 0.148, S_G: 0.192 },
+  },
+  'Point 6': {
+    A:  { EN: 0.519, GEO: 1.160, HOMA: -0.679,
+          LDM_OffDiag: 0.743, LDM_Diag: 1.434, LDM_Frob: 1.615, LDM_RMSD: 0.269, LDM_CT: -12.462,
+          Q_Frob: 0.479, Q_RMSD: 0.087, S_hom: 0.324 },
+    B:  { EN: 2.176, GEO: 1.282, HOMA: -2.458,
+          LDM_OffDiag: 0.695, LDM_Diag: 1.451, LDM_Frob: 1.609, LDM_RMSD: 0.268, LDM_CT: -15.411,
+          Q_Frob: 0.420, Q_RMSD: 0.077, S_hom: 0.298 },
+    AB: { EN: 0.813, GEO: 1.405, HOMA: -1.218,
+          LDM_OffDiag: 0.922, LDM_Diag: 1.776, LDM_Frob: 2.001, LDM_RMSD: 0.200, LDM_CT: -10.537,
+          Q_Frob: 0.631, Q_RMSD: 0.067, S_hom: 0.189 },
+    _global: { HOMA_TOTAL: -1.409, Q_G: 0.085, S_hom_G: 0.147, S_G: 0.190 },
   },
 };
 
@@ -416,13 +517,21 @@ function render() {
     _tooltip: (ctx) => `IRC : s = ${ctx.parsed.x.toFixed(3)} | ΔE = ${ctx.parsed.y.toFixed(3)} kcal/mol`,
   });
 
-  // -- Stationary points --
+  // -- Stationary points + intermediate points --
+  const markerFill   = (sp) => sp.intermediate ? c(intColor.fill)
+                              : sp.key === 'TS' ? tsColor.fill
+                              : minColor.fill;
+  const markerBorder = (sp) => sp.intermediate ? c(intColor.border)
+                              : sp.key === 'TS' ? tsColor.border
+                              : minColor.border;
   datasets.push({
-    label: 'Stationary points',
+    label: 'Stationary & intermediate points',
     data: STATIONARY.map(sp => ({ x: sp.s, y: sp.dE })),
-    pointStyle: 'circle', pointRadius: 8, pointHoverRadius: 10, showLine: false,
-    backgroundColor: STATIONARY.map(sp => sp.key === 'TS' ? tsColor.fill : minColor.fill),
-    borderColor:     STATIONARY.map(sp => sp.key === 'TS' ? tsColor.border : minColor.border),
+    pointStyle: 'circle', showLine: false,
+    pointRadius:      STATIONARY.map(sp => sp.intermediate ? 5 : 8),
+    pointHoverRadius: STATIONARY.map(sp => sp.intermediate ? 7 : 10),
+    backgroundColor:  STATIONARY.map(markerFill),
+    borderColor:      STATIONARY.map(markerBorder),
     borderWidth: 2, yAxisID: 'y',
     _stationary: STATIONARY.map(sp => sp.key),
     _tooltip: (ctx) => {
@@ -504,9 +613,10 @@ function buildLegend() {
   // Stationary points
   const spSec = document.createElement('div');
   spSec.className = 'legend-section';
-  spSec.innerHTML = `<span class="heading">Stationary points</span>
+  spSec.innerHTML = `<span class="heading">Points</span>
     <span class="legend-item"><span class="swatch" style="background:${minColor.fill};border:2px solid ${minColor.border}"></span>Reactant / Product (minima)</span>
-    <span class="legend-item"><span class="swatch" style="background:${tsColor.fill};border:2px solid ${tsColor.border}"></span>TS</span>`;
+    <span class="legend-item"><span class="swatch" style="background:${tsColor.fill};border:2px solid ${tsColor.border}"></span>TS</span>
+    <span class="legend-item"><span class="swatch" style="background:${c(intColor.fill)};border:2px solid ${c(intColor.border)};width:8px;height:8px"></span>Intermediates (Points 1–6)</span>`;
   root.appendChild(spSec);
 
   if (state.descriptor) {
