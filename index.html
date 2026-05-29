@@ -78,7 +78,7 @@ footer { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--bord
     Intrinsic reaction coordinate (forward + reverse) au niveau <code>wB97XD/6-311++G(d,p)</code>.
     Trois cycles analysés : <strong>A</strong> (benzénique), <strong>B</strong> (dérivé du diène), <strong>A+B</strong> (système bicyclique fusionné).
     Points principaux <strong>Reactant / TS / Product</strong> (gros marqueurs verts/orange) + 6 points intermédiaires
-    <strong>Points 1–6</strong> (petits marqueurs bleu-violet, descripteurs B3LYP/6-311+G(d,p) recalculés sur géométries IRC).
+    <strong>Points 1–6</strong> (petits marqueurs bleu-violet, descripteurs calculés au même niveau que l'IRC sur géométries sélectionnées le long du chemin).
     Cliquer sur n'importe quel point pour voir tous ses descripteurs.
   </p>
 </header>
@@ -115,8 +115,8 @@ footer { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--bord
     Coordonnée de réaction <em>s</em> en amu<sup>½</sup>·bohr (convention IUPAC pour IRC en masse-pondérée).
     Les courbes de descripteurs sont des interpolations linéaires entre 9 points calculés (Reactant, Points 1–3, TS, Points 4–6, Product) ;
     elles indiquent la tendance mais n'ont pas de valeur prédictive entre points.
-    Points intermédiaires : descripteurs calculés au niveau <strong>B3LYP/6-311+G(d,p)</strong> sur géométries IRC sélectionnées
-    (P1 ≈ Reactant, P2 → reverse n=20, P3 → reverse n=8, P4 → forward n=6, P5 → forward n=13, P6 ≈ Product un peu plus relaxé).
+    Points intermédiaires : géométries IRC sélectionnées le long du chemin (P1 ≈ Reactant, P2 → reverse n=20, P3 → reverse n=8, P4 → forward n=6, P5 → forward n=13, P6 ≈ Product un peu plus relaxé) ;
+    descripteurs calculés au <strong>même niveau que l'IRC, wB97XD/6-311++G(d,p)</strong>.
     HOMA: Krygowski R<sub>opt</sub>=1.3913 Å. LDM &amp; Q family: Pilmé &amp; Spezia (2026). S-hom: indice d'homogénéité électronique.
     Le suffixe <em>(G)</em> indique une grandeur globale (indépendante du cycle considéré).
   </p>
@@ -290,7 +290,7 @@ const DESC = {
           Q_Frob: 0.632865, Q_RMSD: 0.066710, S_hom: 0.188640 },
     _global: { HOMA_TOTAL: -1.008900, Q_G: 0.084842, S_hom_G: 0.145798, S_G: 0.189495 },
   },
-  // -- Intermediate Points (PDF "DA" — B3LYP/6-311+G(d,p)) --
+  // -- Intermediate Points (PDF "DA" — même niveau que l'IRC : wB97XD/6-311++G(d,p)) --
   'Point 1': {
     A:  { EN: 0.003, GEO: 0.002, HOMA: 0.995,
           LDM_OffDiag: 0.485, LDM_Diag: 1.428, LDM_Frob: 1.508, LDM_RMSD: 0.251, LDM_CT: -9.873,
