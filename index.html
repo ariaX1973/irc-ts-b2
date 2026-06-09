@@ -726,23 +726,28 @@ function buildExportStateLabel() {
   return `${cy}  ·  ${desc}`;
 }
 
-// Rasterise un élément HTML (légende) via SVG foreignObject avec INJECTION DES STYLES DE LA PAGE,
-// pour que les classes .legend-section / .legend-item / .swatch / .stroke-mini rendent comme sur le site.
-// On ajoute un override light-mode forcé APRÈS les styles de la page (gagne en cascade).
-function captureHtmlAsImage(el, width) {
+// Rasterise un élément HTML (légende) avec injection des styles de la page + forçage de tailles
+// de police proportionnelles au DPR pour matcher la taille des axes Chart.js dans le PNG.
+function captureHtmlAsImage(el, width, dpr) {
   if (!el) return Promise.resolve(null);
+  dpr = dpr || Math.max(1, window.devicePixelRatio || 1);
   const pageStyles = Array.from(document.querySelectorAll('style'))
     .map(s => s.textContent).join('\n');
+  const LEG = Math.round(13 * dpr), LEG_H = Math.round(12 * dpr);
   const forceLight =
     ':root{--bg:#FFFFFF;--surface:#FFFFFF;--text:#1A1A1A;--muted:#6B6B6B;--border:#E2E0DA;--accent:#534AB7;}' +
     '@media (prefers-color-scheme: dark){:root{--bg:#FFFFFF;--surface:#FFFFFF;--text:#1A1A1A;--muted:#6B6B6B;--border:#E2E0DA;--accent:#534AB7;}}' +
-    'body,html{background:#FFFFFF;color:#1A1A1A;}';
-  // Mesurer la hauteur rendue côté page (les styles flex appliqués → wrap correct)
-  const height = Math.max(80, el.scrollHeight + 16);
+    'body,html{background:#FFFFFF;color:#1A1A1A;}' +
+    // Tailles forcées pour matcher les axes Chart.js (12*DPR)
+    '.legend,#chart-legend{font-size:' + LEG + 'px !important;}' +
+    '.legend .heading,.legend-section .heading{font-size:' + LEG_H + 'px !important;font-weight:700 !important;}' +
+    '.legend-item,.legend-item *{font-size:' + LEG + 'px !important;}';
+  // Hauteur estimée : scrollHeight côté page × DPR (les fonts agrandies prennent plus de place)
+  const height = Math.max(100 * dpr, Math.round(el.scrollHeight * dpr + 24 * dpr));
   const svgStr =
     '<svg xmlns="http://www.w3.org/2000/svg" width="' + width + '" height="' + height + '">' +
       '<foreignObject x="0" y="0" width="100%" height="100%">' +
-        '<div xmlns="http://www.w3.org/1999/xhtml" style="background:#fff;padding:10px 12px;box-sizing:border-box;width:' + width + 'px;font-family:-apple-system,Segoe UI,Arial,sans-serif;">' +
+        '<div xmlns="http://www.w3.org/1999/xhtml" style="background:#fff;padding:' + (10*dpr) + 'px ' + (12*dpr) + 'px;box-sizing:border-box;width:' + width + 'px;font-family:-apple-system,Segoe UI,Arial,sans-serif;">' +
           '<style>' + pageStyles + '\n' + forceLight + '</style>' +
           el.outerHTML +
         '</div>' +
@@ -758,6 +763,15 @@ function captureHtmlAsImage(el, width) {
 }
 
 async function downloadDiagram() {
+  const DPR = Math.max(1, window.devicePixelRatio || 1);
+  // Tailles de police calibrées en device-px pour parité avec axes Chart.js (qui sont à 12*DPR)
+  const F_TITLE = Math.round(24 * DPR);   // titre principal, plus gros
+  const F_SUB   = Math.round(13 * DPR);   // sous-titre = même taille que axes
+  const margin = Math.round(28 * DPR);
+  const lineGap = Math.round(8 * DPR);
+  const titleH = F_TITLE + F_SUB * 2 + lineGap * 3 + Math.round(10 * DPR);
+  const legendGap = Math.round(12 * DPR);
+
   const chartImg = await new Promise(r => {
     const i = new Image();
     i.onload = () => r(i);
@@ -765,12 +779,8 @@ async function downloadDiagram() {
   });
   const legendData = await captureHtmlAsImage(
     document.getElementById('chart-legend'),
-    chartImg.naturalWidth
+    chartImg.naturalWidth, DPR
   );
-
-  const margin = 24;
-  const titleH = 80;
-  const legendGap = 8;
   const legendH = legendData ? legendData.height : 0;
 
   const out = document.createElement('canvas');
@@ -780,13 +790,17 @@ async function downloadDiagram() {
   ctx.fillStyle = '#FFFFFF';
   ctx.fillRect(0, 0, out.width, out.height);
   ctx.textBaseline = 'top';
+  let y = margin;
   ctx.fillStyle = '#1A1A1A';
-  ctx.font = 'bold 18px -apple-system, "Segoe UI", Arial, sans-serif';
-  ctx.fillText(EXPORT_TITLE, margin, margin);
-  ctx.font = '13px -apple-system, "Segoe UI", Arial, sans-serif';
+  ctx.font = 'bold ' + F_TITLE + 'px -apple-system, "Segoe UI", Arial, sans-serif';
+  ctx.fillText(EXPORT_TITLE, margin, y);
+  y += F_TITLE + lineGap;
+  ctx.font = F_SUB + 'px -apple-system, "Segoe UI", Arial, sans-serif';
   ctx.fillStyle = '#6B6B6B';
-  ctx.fillText('Method : ' + EXPORT_METHOD, margin, margin + 26);
-  ctx.fillText('Config : ' + buildExportStateLabel(), margin, margin + 46);
+  ctx.fillText('Method : ' + EXPORT_METHOD, margin, y);
+  y += F_SUB + lineGap;
+  ctx.fillText('Config : ' + buildExportStateLabel(), margin, y);
+
   ctx.drawImage(chartImg, margin, margin + titleH);
   if (legendData) {
     ctx.drawImage(legendData.img, margin, margin + titleH + chartImg.naturalHeight + legendGap);
