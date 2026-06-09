@@ -90,6 +90,10 @@ footer { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--bord
   <div class="row" id="descriptors-row">
     <span class="label">Descriptor</span>
   </div>
+  <div class="row">
+    <span class="label">Export</span>
+    <button class="chip" id="btn-download" title="Télécharge le diagramme courant en PNG avec titre + méthode + état actif">⬇ Télécharger PNG</button>
+  </div>
 </section>
 
 <section class="grid">
@@ -708,6 +712,50 @@ function updateInfoPanel() {
 buildToolbar();
 initChart();
 render();
+
+// ============================================================
+// 11) DOWNLOAD PNG (titre + méthode + état actif compositionnés)
+// ============================================================
+const EXPORT_TITLE  = "IRC TS-B2 — Diels-Alder type intrinsic reaction coordinate";
+const EXPORT_METHOD = "wB97XD/6-311++G(d,p) (Gaussian 16)";
+const EXPORT_SLUG   = "irc-ts-b2";
+
+function buildExportStateLabel() {
+  const cy = [...state.cycles].sort().map(c => `Cycle ${c}`).join(' + ');
+  const desc = state.descriptor ? `descriptor: ${DESCRIPTORS.find(x => x.key === state.descriptor).label}` : 'descriptor: —';
+  return `${cy}  ·  ${desc}`;
+}
+
+function downloadDiagram() {
+  const dataUrl = chart.toBase64Image('image/png', 1);
+  const img = new Image();
+  img.onload = () => {
+    const margin = 24;
+    const titleH = 80;
+    const out = document.createElement('canvas');
+    out.width  = img.naturalWidth  + margin * 2;
+    out.height = img.naturalHeight + margin * 2 + titleH;
+    const ctx = out.getContext('2d');
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, out.width, out.height);
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = '#1A1A1A';
+    ctx.font = 'bold 18px -apple-system, "Segoe UI", Arial, sans-serif';
+    ctx.fillText(EXPORT_TITLE, margin, margin);
+    ctx.font = '13px -apple-system, "Segoe UI", Arial, sans-serif';
+    ctx.fillStyle = '#6B6B6B';
+    ctx.fillText('Method : ' + EXPORT_METHOD, margin, margin + 26);
+    ctx.fillText('Config : ' + buildExportStateLabel(), margin, margin + 46);
+    ctx.drawImage(img, margin, margin + titleH);
+    const slug = EXPORT_SLUG + '_' + (state.descriptor || 'PES') + '_' + new Date().toISOString().slice(0, 10);
+    const link = document.createElement('a');
+    link.download = slug + '.png';
+    link.href = out.toDataURL('image/png');
+    link.click();
+  };
+  img.src = dataUrl;
+}
+document.getElementById('btn-download').addEventListener('click', downloadDiagram);
 
 })();
 </script>
