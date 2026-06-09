@@ -765,7 +765,7 @@ function captureHtmlAsImage(el, width, dpr) {
 async function downloadDiagram() {
   const DPR = Math.max(1, window.devicePixelRatio || 1);
   // Tailles de police calibrées en device-px pour parité avec axes Chart.js (qui sont à 12*DPR)
-  const F_TITLE = Math.round(24 * DPR);   // titre principal, plus gros
+  const F_TITLE = Math.round(32 * DPR);   // titre principal, plus gros
   const F_SUB   = Math.round(13 * DPR);   // sous-titre = même taille que axes
   const margin = Math.round(28 * DPR);
   const lineGap = Math.round(8 * DPR);
