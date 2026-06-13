@@ -79,6 +79,7 @@ footer { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--bord
     Trois cycles analysés : <strong>A</strong> (benzénique), <strong>B</strong> (dérivé du diène), <strong>A+B</strong> (système bicyclique fusionné).
     Points principaux <strong>Reactant / TS / Product</strong> (gros marqueurs verts/orange) + 6 points intermédiaires
     <strong>Points 1–6</strong> (petits marqueurs bleu-violet, descripteurs calculés au même niveau que l'IRC sur géométries sélectionnées le long du chemin).
+    Famille <strong>NICS</strong> ajoutée (NICS<sub>iso</sub>, NICS<sub>zz</sub> global, NICS<sub>zz</sub> local) — 1 point fantôme Bq à 1.7 Å au-dessus du plan du cycle <strong>6-1-2-3</strong>, ωB97X-D/6-311++G(d,p).
     Cliquer sur n'importe quel point pour voir tous ses descripteurs.
   </p>
 </header>
@@ -123,6 +124,8 @@ footer { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--bord
     descripteurs calculés au <strong>même niveau que l'IRC, wB97XD/6-311++G(d,p)</strong>.
     HOMA: Krygowski R<sub>opt</sub>=1.3913 Å. LDM &amp; Q family: Pilmé &amp; Spezia (2026). S-hom: indice d'homogénéité électronique.
     Le suffixe <em>(G)</em> indique une grandeur globale (indépendante du cycle considéré).
+    <strong>NICS</strong> (Nucleus-Independent Chemical Shifts) calculés avec un point fantôme Bq placé à 1.7 Å au-dessus du plan moyen du cycle défini par les atomes <em>6-1-2-3</em>, au niveau <strong>ωB97X-D/6-311++G(d,p)</strong>.
+    NICS<sub>iso</sub> = isotrope du tenseur de blindage ; NICS<sub>zz</sub> global = composante zz dans le repère absolu ; NICS<sub>zz</sub> local = projection du tenseur sur la normale locale du cycle (descripteur le plus direct du courant d'aromaticité).
   </p>
 </footer>
 
@@ -268,7 +271,7 @@ const DESC = {
     AB: { EN: 27.857633, GEO: 115.532518, HOMA: -142.390151,
           LDM_OffDiag: 1.432771, LDM_Diag: 1.681366, LDM_Frob: 2.209033, LDM_RMSD: 0.220903, LDM_CT: -10.432333,
           Q_Frob: 0.702202, Q_RMSD: 0.074019, S_hom: 0.142581 },
-    _global: { HOMA_TOTAL: -129.355353, Q_G: 0.086272, S_hom_G: 0.148355, S_G: 0.182870 },
+    _global: { HOMA_TOTAL: -129.355353, Q_G: 0.086272, S_hom_G: 0.148355, S_G: 0.182870 , NICS_iso: -6.56, NICS_zz_g: -11.7, NICS_zz_loc: -21.07 },
   },
   TS: {
     A:  { EN: 0.055198, GEO: 0.279339, HOMA: 0.665463,
@@ -280,7 +283,7 @@ const DESC = {
     AB: { EN: 3.972477, GEO: 16.946471, HOMA: -19.918948,
           LDM_OffDiag: 1.002252, LDM_Diag: 1.756812, LDM_Frob: 2.022597, LDM_RMSD: 0.202260, LDM_CT: -10.603833,
           Q_Frob: 0.558456, Q_RMSD: 0.058866, S_hom: 0.183233 },
-    _global: { HOMA_TOTAL: -18.052241, Q_G: 0.083981, S_hom_G: 0.151298, S_G: 0.194504 },
+    _global: { HOMA_TOTAL: -18.052241, Q_G: 0.083981, S_hom_G: 0.151298, S_G: 0.194504 , NICS_iso: -3.67, NICS_zz_g: -8.27, NICS_zz_loc: -12.95 },
   },
   Product: {
     A:  { EN: 0.464675, GEO: 1.146192, HOMA: -0.610867,
@@ -292,7 +295,7 @@ const DESC = {
     AB: { EN: 0.646490, GEO: 1.155613, HOMA: -0.802103,
           LDM_OffDiag: 0.922915, LDM_Diag: 1.775043, LDM_Frob: 2.000637, LDM_RMSD: 0.200064, LDM_CT: -10.500000,
           Q_Frob: 0.632865, Q_RMSD: 0.066710, S_hom: 0.188640 },
-    _global: { HOMA_TOTAL: -1.008900, Q_G: 0.084842, S_hom_G: 0.145798, S_G: 0.189495 },
+    _global: { HOMA_TOTAL: -1.008900, Q_G: 0.084842, S_hom_G: 0.145798, S_G: 0.189495 , NICS_iso: -1.48, NICS_zz_g: -4.28, NICS_zz_loc: -5.96 },
   },
   // -- Intermediate Points (PDF "DA" — même niveau que l'IRC : wB97XD/6-311++G(d,p)) --
   'Point 1': {
@@ -305,7 +308,7 @@ const DESC = {
     AB: { EN: 17.681, GEO: 74.486, HOMA: -91.167,
           LDM_OffDiag: 1.403, LDM_Diag: 1.711, LDM_Frob: 2.213, LDM_RMSD: 0.221, LDM_CT: -10.495,
           Q_Frob: 0.705, Q_RMSD: 0.074, S_hom: 0.147 },
-    _global: { HOMA_TOTAL: -82.789, Q_G: 0.086, S_hom_G: 0.149, S_G: 0.184 },
+    _global: { HOMA_TOTAL: -82.789, Q_G: 0.086, S_hom_G: 0.149, S_G: 0.184 , NICS_iso: -6.51, NICS_zz_g: -11.21, NICS_zz_loc: -21.07 },
   },
   'Point 2': {
     A:  { EN: 0.004, GEO: 0.006, HOMA: 0.991,
@@ -317,7 +320,7 @@ const DESC = {
     AB: { EN: 13.093, GEO: 56.028, HOMA: -68.120,
           LDM_OffDiag: 1.380, LDM_Diag: 1.726, LDM_Frob: 2.210, LDM_RMSD: 0.221, LDM_CT: -10.529,
           Q_Frob: 0.708, Q_RMSD: 0.075, S_hom: 0.150 },
-    _global: { HOMA_TOTAL: -61.839, Q_G: 0.086, S_hom_G: 0.150, S_G: 0.185 },
+    _global: { HOMA_TOTAL: -61.839, Q_G: 0.086, S_hom_G: 0.150, S_G: 0.185 , NICS_iso: -6.59, NICS_zz_g: -12.06, NICS_zz_loc: -21.03 },
   },
   'Point 3': {
     A:  { EN: 0.000, GEO: 0.050, HOMA: 0.950,
@@ -329,7 +332,7 @@ const DESC = {
     AB: { EN: 6.472, GEO: 28.853, HOMA: -34.325,
           LDM_OffDiag: 1.246, LDM_Diag: 1.748, LDM_Frob: 2.146, LDM_RMSD: 0.215, LDM_CT: -10.537,
           Q_Frob: 0.665, Q_RMSD: 0.070, S_hom: 0.163 },
-    _global: { HOMA_TOTAL: -31.114, Q_G: 0.086, S_hom_G: 0.151, S_G: 0.189 },
+    _global: { HOMA_TOTAL: -31.114, Q_G: 0.086, S_hom_G: 0.151, S_G: 0.189 , NICS_iso: -5.89, NICS_zz_g: -11.89, NICS_zz_loc: -18.97 },
   },
   'Point 4': {
     A:  { EN: 0.194, GEO: 0.604, HOMA: 0.201,
@@ -341,7 +344,7 @@ const DESC = {
     AB: { EN: 2.673, GEO: 10.175, HOMA: -11.849,
           LDM_OffDiag: 0.919, LDM_Diag: 1.758, LDM_Frob: 1.984, LDM_RMSD: 0.198, LDM_CT: -10.631,
           Q_Frob: 0.566, Q_RMSD: 0.060, S_hom: 0.191 },
-    _global: { HOMA_TOTAL: -10.820, Q_G: 0.084, S_hom_G: 0.150, S_G: 0.194 },
+    _global: { HOMA_TOTAL: -10.820, Q_G: 0.084, S_hom_G: 0.150, S_G: 0.194 , NICS_iso: -2.2, NICS_zz_g: -5.4, NICS_zz_loc: -8.47 },
   },
   'Point 5': {
     A:  { EN: 0.422, GEO: 0.994, HOMA: -0.416,
@@ -353,7 +356,7 @@ const DESC = {
     AB: { EN: 1.404, GEO: 3.436, HOMA: -3.840,
           LDM_OffDiag: 0.918, LDM_Diag: 1.764, LDM_Frob: 1.989, LDM_RMSD: 0.199, LDM_CT: -10.585,
           Q_Frob: 0.616, Q_RMSD: 0.065, S_hom: 0.191 },
-    _global: { HOMA_TOTAL: -3.715, Q_G: 0.084, S_hom_G: 0.148, S_G: 0.192 },
+    _global: { HOMA_TOTAL: -3.715, Q_G: 0.084, S_hom_G: 0.148, S_G: 0.192 , NICS_iso: -1.57, NICS_zz_g: -4.31, NICS_zz_loc: -6.38 },
   },
   'Point 6': {
     A:  { EN: 0.519, GEO: 1.160, HOMA: -0.679,
@@ -365,7 +368,7 @@ const DESC = {
     AB: { EN: 0.813, GEO: 1.405, HOMA: -1.218,
           LDM_OffDiag: 0.922, LDM_Diag: 1.776, LDM_Frob: 2.001, LDM_RMSD: 0.200, LDM_CT: -10.537,
           Q_Frob: 0.631, Q_RMSD: 0.067, S_hom: 0.189 },
-    _global: { HOMA_TOTAL: -1.409, Q_G: 0.085, S_hom_G: 0.147, S_G: 0.190 },
+    _global: { HOMA_TOTAL: -1.409, Q_G: 0.085, S_hom_G: 0.147, S_G: 0.190 , NICS_iso: -1.48, NICS_zz_g: -4.27, NICS_zz_loc: -6.01 },
   },
 };
 
@@ -386,9 +389,13 @@ const DESCRIPTORS = [
   { key:'Q_G',         label:'Q (G)',         family:'Global', global:true },
   { key:'S_hom_G',     label:'S-hom (G)',     family:'Global', global:true },
   { key:'S_G',         label:'S (G)',         family:'Global', global:true },
+  // NICS — 1 point fantôme Bq à 1.7 Å du plan moyen du cycle 6-1-2-3 (ωB97X-D/6-311++G(d,p))
+  { key:'NICS_iso',    label:'NICSiso',       family:'NICS',   global:true },
+  { key:'NICS_zz_g',   label:'NICSzz global', family:'NICS',   global:true },
+  { key:'NICS_zz_loc', label:'NICSzz local',  family:'NICS',   global:true },
 ];
 
-const FAMILY_ORDER = ['HOMA','LDM','Q','S','Global'];
+const FAMILY_ORDER = ['HOMA','LDM','Q','S','Global','NICS'];
 
 // ============================================================
 // 4) STATE
@@ -702,6 +709,19 @@ function updateInfoPanel() {
     html += `<tr${hl}><td>${d.label}</td><td>${data._global[k].toFixed(3)}</td></tr>`;
   });
   html += `</tbody></table>`;
+
+  // NICS descriptors (point fantôme Bq at 1.7 Å above ring 6-1-2-3)
+  if (data._global.NICS_iso !== undefined) {
+    html += `<h3>NICS (Bq @ 1.7 Å above ring 6-1-2-3)</h3>
+      <table><thead><tr><th>Descriptor</th><th>Value (ppm)</th></tr></thead><tbody>`;
+    ['NICS_iso','NICS_zz_g','NICS_zz_loc'].forEach(k => {
+      const d = DESCRIPTORS.find(x => x.key === k);
+      const v = data._global[k];
+      const hl = (active === k) ? ' class="highlight"' : '';
+      html += `<tr${hl}><td>${d.label}</td><td>${(v !== undefined ? v.toFixed(2) : '—')}</td></tr>`;
+    });
+    html += `</tbody></table>`;
+  }
 
   panel.innerHTML = html;
 }
