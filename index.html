@@ -62,6 +62,25 @@ header h1 { font-size: 1.4rem; font-weight: 600; letter-spacing: -0.01em; margin
 .info-panel th { color: var(--muted); font-weight: 600; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; }
 .info-panel th:first-child, .info-panel td:first-child { text-align: left; color: var(--muted); }
 .info-panel tr.highlight td { background: rgba(83, 74, 183, 0.10); color: var(--text); font-weight: 500; }
+/* Grid panel (mini-charts per descriptor) */
+.grid-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+              padding: 1rem; margin-top: 1rem; }
+.grid-panel summary { cursor: pointer; font-weight: 600; font-size: 0.95rem; list-style: none;
+                      display: flex; align-items: center; gap: 0.5rem; }
+.grid-panel summary::before { content: '▾'; display: inline-block; transition: transform 0.15s; color: var(--accent); }
+.grid-panel:not([open]) summary::before { transform: rotate(-90deg); }
+.grid-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+              gap: 0.75rem; margin-top: 0.75rem; }
+.grid-card { background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+             padding: 0.5rem 0.5rem 0.25rem; position: relative; }
+.grid-card-title { font-size: 0.78rem; font-weight: 600; color: var(--text);
+                   padding: 0 0.25rem 0.25rem; display: flex; justify-content: space-between; align-items: baseline; }
+.grid-card-family { font-size: 0.7rem; color: var(--muted); font-weight: 400;
+                    text-transform: uppercase; letter-spacing: 0.04em; }
+.grid-card-canvas-wrap { position: relative; height: 150px; }
+.grid-empty { color: var(--muted); font-size: 0.85rem; padding: 1rem; text-align: center;
+              border: 1px dashed var(--border); border-radius: 6px; }
+
 /* Compare panel (multi-descriptor) */
 .compare-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
                  padding: 1rem; margin-top: 1rem; }
@@ -157,6 +176,29 @@ footer { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--bord
   <div class="compare-legend" id="compare-legend"></div>
   <div class="compare-actions">
     <button class="compare-chip" id="cmp-download" style="border-color:var(--accent);color:var(--accent);font-weight:600">⬇ Télécharger ce panel en PNG</button>
+  </div>
+</details>
+
+<details class="grid-panel" id="grid-panel" open>
+  <summary>Panels par descripteur — chaque descripteur dans son propre mini-graphe (vue comparative compacte)</summary>
+  <div class="compare-controls">
+    <div class="compare-row" id="grid-cycles-row">
+      <span class="label">Cycles</span>
+    </div>
+    <div class="compare-row" id="grid-desc-row">
+      <span class="label">Descripteurs</span>
+    </div>
+    <div class="compare-row">
+      <span class="label">Actions</span>
+      <button class="compare-chip" id="grid-preset-aroma" title="Sélection rapide HOMA / HOMA TOTAL / NICSiso / NICSzz local">Preset aromaticité</button>
+      <button class="compare-chip" id="grid-clear">Tout désélectionner</button>
+    </div>
+  </div>
+  <div class="grid-cards" id="grid-cards">
+    <p class="grid-empty">Coche des descripteurs ci-dessus pour les afficher en mini-graphes.</p>
+  </div>
+  <div class="compare-actions">
+    <button class="compare-chip" id="grid-download" style="border-color:var(--accent);color:var(--accent);font-weight:600">⬇ Télécharger le grid panel en PNG</button>
   </div>
 </details>
 
@@ -1096,6 +1138,299 @@ async function cmpDownload() {
 cmpBuildToolbar();
 cmpInit();
 cmpRender();
+
+// ============================================================
+// 10c) GRID PANEL — chaque descripteur dans son propre mini-graphe
+// ============================================================
+const gridState = {
+  cycles: new Set(['A', 'B', 'AB']),
+  descriptors: new Set(['HOMA', 'NICS_iso', 'NICS_zz_loc']),  // 3 par défaut
+};
+const gridCharts = {};  // descKey → Chart instance
+
+function gridValueAt(descKey, pointKey) {
+  // Same aggregation rule as compare panel: per-cycle → moyenne, global → direct
+  const d = DESCRIPTORS.find(x => x.key === descKey);
+  if (!d) return null;
+  const entry = DESC[pointKey];
+  if (!entry) return null;
+  if (d.global) {
+    const v = entry._global?.[descKey];
+    return Number.isFinite(v) ? v : null;
+  }
+  const vals = [];
+  gridState.cycles.forEach(cy => {
+    const v = entry[cy]?.[descKey];
+    if (Number.isFinite(v)) vals.push(v);
+  });
+  if (!vals.length) return null;
+  return vals.reduce((a,b) => a+b, 0) / vals.length;
+}
+
+function gridBuildToolbar() {
+  // Cycles row
+  const cRow = document.getElementById('grid-cycles-row');
+  CYCLES.forEach(cy => {
+    const btn = document.createElement('button');
+    btn.className = 'compare-chip';
+    btn.dataset.cycle = cy;
+    btn.setAttribute('aria-pressed', gridState.cycles.has(cy));
+    btn.style.borderColor = c(cycleColors[cy]);
+    btn.innerHTML = `<span style="width:9px;height:9px;border-radius:50%;display:inline-block;background:${c(cycleColors[cy])}"></span>${CYCLE_LABELS[cy]}`;
+    btn.addEventListener('click', () => {
+      if (gridState.cycles.has(cy)) { if (gridState.cycles.size > 1) gridState.cycles.delete(cy); }
+      else gridState.cycles.add(cy);
+      btn.setAttribute('aria-pressed', gridState.cycles.has(cy));
+      gridRender();
+    });
+    cRow.appendChild(btn);
+  });
+
+  // Descriptors row (grouped by family)
+  const dRow = document.getElementById('grid-desc-row');
+  let lastFam = null;
+  DESCRIPTORS.forEach((d, idx) => {
+    if (d.family !== lastFam) {
+      if (lastFam !== null) {
+        const sep = document.createElement('span');
+        sep.style.cssText = 'color:var(--border);margin:0 0.2rem;user-select:none';
+        sep.textContent = '|';
+        dRow.appendChild(sep);
+      }
+      const tag = document.createElement('span');
+      tag.style.cssText = 'color:var(--muted);font-size:0.72rem;margin-right:0.2rem';
+      tag.textContent = d.family + ':';
+      dRow.appendChild(tag);
+      lastFam = d.family;
+    }
+    const btn = document.createElement('button');
+    btn.className = 'compare-chip';
+    btn.dataset.gridDesc = d.key;
+    btn.setAttribute('aria-pressed', gridState.descriptors.has(d.key));
+    btn.textContent = d.label;
+    btn.addEventListener('click', () => {
+      if (gridState.descriptors.has(d.key)) gridState.descriptors.delete(d.key);
+      else gridState.descriptors.add(d.key);
+      btn.setAttribute('aria-pressed', gridState.descriptors.has(d.key));
+      gridRender();
+    });
+    dRow.appendChild(btn);
+  });
+
+  document.getElementById('grid-preset-aroma').addEventListener('click', () => {
+    gridState.descriptors = new Set(['HOMA', 'HOMA_TOTAL', 'NICS_iso', 'NICS_zz_loc']);
+    document.querySelectorAll('[data-grid-desc]').forEach(b => {
+      b.setAttribute('aria-pressed', gridState.descriptors.has(b.dataset.gridDesc));
+    });
+    gridRender();
+  });
+  document.getElementById('grid-clear').addEventListener('click', () => {
+    gridState.descriptors.clear();
+    document.querySelectorAll('[data-grid-desc]').forEach(b => b.setAttribute('aria-pressed', 'false'));
+    gridRender();
+  });
+  document.getElementById('grid-download').addEventListener('click', gridDownload);
+}
+
+function gridRender() {
+  const root = document.getElementById('grid-cards');
+  // Destroy existing charts
+  Object.values(gridCharts).forEach(ch => { try { ch.destroy(); } catch(_){} });
+  for (const k in gridCharts) delete gridCharts[k];
+  root.innerHTML = '';
+
+  const activeKeys = [...gridState.descriptors];
+  if (!activeKeys.length) {
+    root.innerHTML = '<p class="grid-empty">Coche des descripteurs ci-dessus pour les afficher en mini-graphes.</p>';
+    return;
+  }
+
+  activeKeys.forEach((descKey, idx) => {
+    const d = DESCRIPTORS.find(x => x.key === descKey);
+    if (!d) return;
+    const card = document.createElement('div');
+    card.className = 'grid-card';
+    const titleColor = cmpColor(idx);
+    card.innerHTML = `
+      <div class="grid-card-title">
+        <span style="color:${titleColor}">${d.label}</span>
+        <span class="grid-card-family">${d.family}${d.global ? ' · global' : ' · moy. cycles actifs'}</span>
+      </div>
+      <div class="grid-card-canvas-wrap"><canvas id="grid-chart-${idx}"></canvas></div>
+    `;
+    root.appendChild(card);
+
+    // Build per-descriptor mini chart
+    const pts = STATIONARY.map(sp => {
+      const v = gridValueAt(descKey, sp.key);
+      return { x: sp.s, y: v, _key: sp.key, _intermediate: !!sp.intermediate };
+    });
+
+    // Stationary markers (Reactant/TS/Product as colored)
+    const markerData = STATIONARY.map(sp => ({
+      x: sp.s,
+      y: gridValueAt(descKey, sp.key),
+      _name: sp.key,
+    }));
+    const markerColors = STATIONARY.map(sp => {
+      if (sp.key === 'TS') return tsColor.fill;
+      if (sp.intermediate) return c(intColor.fill);
+      return minColor.fill;
+    });
+    const markerBorders = STATIONARY.map(sp => {
+      if (sp.key === 'TS') return tsColor.border;
+      if (sp.intermediate) return c(intColor.border);
+      return minColor.border;
+    });
+    const markerStyles = STATIONARY.map(sp => sp.key === 'TS' ? 'star' : 'circle');
+    const markerRadii  = STATIONARY.map(sp => sp.key === 'TS' ? 8 : (sp.intermediate ? 4 : 6));
+
+    const ctx = document.getElementById('grid-chart-' + idx).getContext('2d');
+    gridCharts[descKey] = new Chart(ctx, {
+      type: 'line',
+      data: {
+        datasets: [{
+          label: d.label,
+          data: pts,
+          borderColor: titleColor,
+          backgroundColor: titleColor,
+          borderWidth: 2, pointRadius: 0, pointHoverRadius: 0,
+          tension: 0.15, spanGaps: true,
+        }, {
+          label: '_markers',
+          data: markerData,
+          type: 'scatter',
+          showLine: false,
+          pointStyle: markerStyles,
+          pointRadius: markerRadii,
+          pointHoverRadius: markerRadii.map(r => r + 2),
+          backgroundColor: markerColors,
+          borderColor: markerBorders,
+          borderWidth: 1.5,
+        }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        animation: { duration: 100 },
+        interaction: { mode: 'nearest', axis: 'x', intersect: false },
+        layout: { padding: { top: 4, right: 6, bottom: 0, left: 4 } },
+        scales: {
+          x: { type: 'linear', min: -8, max: 6, ticks: { stepSize: 2, font: { size: 10 } },
+               title: { display: false }, grid: { color: 'rgba(127,127,127,0.10)', drawTicks: false } },
+          y: { ticks: { font: { size: 10 } },
+               title: { display: false }, grid: { color: 'rgba(127,127,127,0.10)' } },
+        },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => {
+                const v = ctx.parsed.y;
+                const lbl = ctx.dataset.label === '_markers'
+                  ? STATIONARY[ctx.dataIndex].key
+                  : 'point';
+                return `${lbl} : ${Number.isFinite(v) ? v.toFixed(3) : '—'}`;
+              },
+            },
+          },
+        },
+      },
+    });
+  });
+}
+
+async function gridDownload() {
+  if (!gridState.descriptors.size) return;
+  const DPR = Math.max(1, window.devicePixelRatio || 1);
+  const F_TITLE = 30;
+  const F_SUB   = Math.round(13 * DPR);
+  const F_CARD_TITLE = Math.round(14 * DPR);
+  const margin  = Math.round(24 * DPR);
+  const lineGap = Math.round(7 * DPR);
+  const titleH = F_TITLE + F_SUB * 2 + lineGap * 3 + Math.round(10 * DPR);
+  const cardGap = Math.round(12 * DPR);
+  const cardTitleH = F_CARD_TITLE + Math.round(10 * DPR);
+
+  // Capture all mini charts as images
+  const cards = [];
+  for (const descKey of gridState.descriptors) {
+    const ch = gridCharts[descKey];
+    if (!ch) continue;
+    const d = DESCRIPTORS.find(x => x.key === descKey);
+    const img = await new Promise(r => {
+      const i = new Image();
+      i.onload = () => r(i);
+      i.src = ch.toBase64Image('image/png', 1);
+    });
+    cards.push({ descKey, label: d.label, family: d.family + (d.global ? ' · global' : ' · moy. cycles actifs'),
+                 img, color: cmpColor([...gridState.descriptors].indexOf(descKey)) });
+  }
+  if (!cards.length) return;
+
+  // Layout: 2 columns
+  const COLS = 2;
+  const cardW = cards[0].img.naturalWidth;
+  const cardH = cards[0].img.naturalHeight + cardTitleH;
+  const rows = Math.ceil(cards.length / COLS);
+  const gridW = COLS * cardW + (COLS - 1) * cardGap;
+  const gridH = rows * cardH + (rows - 1) * cardGap;
+
+  const out = document.createElement('canvas');
+  out.width  = gridW + margin * 2;
+  out.height = gridH + margin * 2 + titleH;
+  const ctx = out.getContext('2d');
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillRect(0, 0, out.width, out.height);
+  ctx.textBaseline = 'top';
+
+  // Header
+  let y = margin;
+  ctx.fillStyle = '#1A1A1A';
+  ctx.font = 'bold ' + F_TITLE + 'px -apple-system, "Segoe UI", Arial, sans-serif';
+  ctx.fillText(EXPORT_TITLE + ' — Grid panel', margin, y);
+  y += F_TITLE + lineGap;
+  ctx.font = F_SUB + 'px -apple-system, "Segoe UI", Arial, sans-serif';
+  ctx.fillStyle = '#6B6B6B';
+  ctx.fillText('Method : ' + EXPORT_METHOD, margin, y);
+  y += F_SUB + lineGap;
+  const cfg = `Cycles : ${[...gridState.cycles].sort().join('+')}  ·  ${cards.length} mini-graphes`;
+  ctx.fillText('Config : ' + cfg, margin, y);
+
+  // Draw cards
+  const baseY = margin + titleH;
+  cards.forEach((card, i) => {
+    const col = i % COLS, row = Math.floor(i / COLS);
+    const cx = margin + col * (cardW + cardGap);
+    const cy = baseY + row * (cardH + cardGap);
+    // Card frame
+    ctx.fillStyle = '#FAFAF7';
+    ctx.fillRect(cx, cy, cardW, cardH);
+    ctx.strokeStyle = '#E2E0DA';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(cx, cy, cardW, cardH);
+    // Title
+    ctx.fillStyle = card.color;
+    ctx.font = 'bold ' + F_CARD_TITLE + 'px -apple-system, "Segoe UI", Arial, sans-serif';
+    ctx.fillText(card.label, cx + 8, cy + 6);
+    // Family on right
+    ctx.fillStyle = '#9A9A9A';
+    ctx.font = Math.round(11 * DPR) + 'px -apple-system, "Segoe UI", Arial, sans-serif';
+    const famText = card.family;
+    const famW = ctx.measureText(famText).width;
+    ctx.fillText(famText, cx + cardW - famW - 8, cy + 8);
+    // Chart image
+    ctx.drawImage(card.img, cx, cy + cardTitleH);
+  });
+
+  const slug = EXPORT_SLUG + '_grid_' + new Date().toISOString().slice(0, 10);
+  const link = document.createElement('a');
+  link.download = slug + '.png';
+  link.href = out.toDataURL('image/png');
+  link.click();
+}
+
+gridBuildToolbar();
+gridRender();
 
 // ============================================================
 // 11) DOWNLOAD PNG (titre + méthode + état actif compositionnés)
