@@ -62,6 +62,29 @@ header h1 { font-size: 1.4rem; font-weight: 600; letter-spacing: -0.01em; margin
 .info-panel th { color: var(--muted); font-weight: 600; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; }
 .info-panel th:first-child, .info-panel td:first-child { text-align: left; color: var(--muted); }
 .info-panel tr.highlight td { background: rgba(83, 74, 183, 0.10); color: var(--text); font-weight: 500; }
+/* Compare panel (multi-descriptor) */
+.compare-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+                 padding: 1rem; margin-top: 1rem; }
+.compare-panel summary { cursor: pointer; font-weight: 600; font-size: 0.95rem; list-style: none;
+                         display: flex; align-items: center; gap: 0.5rem; }
+.compare-panel summary::before { content: '▾'; display: inline-block; transition: transform 0.15s; color: var(--accent); }
+.compare-panel:not([open]) summary::before { transform: rotate(-90deg); }
+.compare-controls { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.75rem; }
+.compare-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
+.compare-row .label { color: var(--muted); font-size: 0.75rem; min-width: 90px;
+                      text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
+.compare-chip { border: 1px solid var(--border); background: transparent; color: var(--text);
+                padding: 3px 9px; border-radius: 14px; cursor: pointer; font-size: 0.78rem;
+                display: inline-flex; align-items: center; gap: 5px; user-select: none;
+                font-family: inherit; }
+.compare-chip:hover { background: var(--border); }
+.compare-chip[aria-pressed="true"] { border-width: 2px; padding: 2px 8px; font-weight: 500; }
+.compare-canvas-wrap { position: relative; height: 380px; margin-top: 0.75rem; }
+.compare-actions { display: flex; gap: 0.4rem; margin-top: 0.5rem; flex-wrap: wrap; }
+.compare-legend { font-size: 0.76rem; color: var(--muted); margin-top: 0.5rem;
+                  display: flex; flex-wrap: wrap; gap: 0.5rem 0.9rem; }
+.compare-legend-item { display: inline-flex; align-items: center; gap: 5px; }
+.compare-legend-stroke { width: 22px; height: 0; border-top: 2.5px solid currentColor; display: inline-block; }
 .info-panel h3 { font-size: 0.85rem; margin: 0.75rem 0 0.25rem; color: var(--muted);
                  text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
 
@@ -111,6 +134,31 @@ footer { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--bord
     <p class="muted">Clique sur un point coloré (vert pour minimum, orange pour TS) du graphique pour afficher les coordonnées et la table complète des descripteurs.</p>
   </aside>
 </section>
+
+<details class="compare-panel" id="compare-panel" open>
+  <summary>Panel comparatif — superpose plusieurs descripteurs sur un seul graphe</summary>
+  <div class="compare-controls">
+    <div class="compare-row" id="cmp-cycles-row">
+      <span class="label">Cycles</span>
+    </div>
+    <div class="compare-row" id="cmp-desc-row">
+      <span class="label">Descripteurs</span>
+    </div>
+    <div class="compare-row">
+      <span class="label">Options</span>
+      <button class="compare-chip" id="cmp-pes" aria-pressed="true" title="Afficher la courbe PES en arrière-plan pour situer Reactant/TS/Product">PES en arrière-plan</button>
+      <button class="compare-chip" id="cmp-normalize" aria-pressed="true" title="Normaliser chaque descripteur à [0,1] pour permettre la comparaison directe entre échelles différentes">Normaliser [0,1]</button>
+      <button class="compare-chip" id="cmp-clear">Tout désélectionner</button>
+    </div>
+  </div>
+  <div class="compare-canvas-wrap">
+    <canvas id="compare-chart" aria-label="Graphique multi-descripteurs superposés"></canvas>
+  </div>
+  <div class="compare-legend" id="compare-legend"></div>
+  <div class="compare-actions">
+    <button class="compare-chip" id="cmp-download" style="border-color:var(--accent);color:var(--accent);font-weight:600">⬇ Télécharger ce panel en PNG</button>
+  </div>
+</details>
 
 <footer>
   <p class="methods-note">
@@ -732,6 +780,322 @@ function updateInfoPanel() {
 buildToolbar();
 initChart();
 render();
+
+// ============================================================
+// 10b) COMPARE PANEL — superposition de plusieurs descripteurs
+// ============================================================
+const cmpState = {
+  cycles: new Set(['A', 'B', 'AB']),
+  descriptors: new Set(['HOMA']),   // par défaut HOMA seul
+  showPES: true,
+  normalize: true,
+};
+
+// Palette pour les courbes du compare panel (jusqu'à ~14 descripteurs distincts)
+const cmpPalette = [
+  '#185FA5','#BA7517','#993556','#0F6E56','#534AB7','#993C1D','#D85A30',
+  '#5DCAA5','#AFA9EC','#F0997B','#85B7EB','#FAC775','#ED93B1','#7C5C2E'
+];
+function cmpColor(idx) { return cmpPalette[idx % cmpPalette.length]; }
+
+// Récupère la valeur d'un descripteur pour un point donné, agrégée si per-cycle.
+// Pour les per-cycle (HOMA, EN, GEO, LDM family, Q family, S-hom) : moyenne sur les cycles actifs du panel.
+// Pour les globaux : valeur directe.
+function cmpValueAt(descKey, pointKey) {
+  const d = DESCRIPTORS.find(x => x.key === descKey);
+  if (!d) return null;
+  const entry = DESC[pointKey];
+  if (!entry) return null;
+  if (d.global) {
+    const v = entry._global?.[descKey];
+    return Number.isFinite(v) ? v : null;
+  }
+  // Per-cycle : moyenne sur les cycles actifs du compare panel
+  const vals = [];
+  cmpState.cycles.forEach(cy => {
+    const v = entry[cy]?.[descKey];
+    if (Number.isFinite(v)) vals.push(v);
+  });
+  if (!vals.length) return null;
+  return vals.reduce((a,b) => a+b, 0) / vals.length;
+}
+
+function cmpBuildToolbar() {
+  // Cycles row
+  const cRow = document.getElementById('cmp-cycles-row');
+  CYCLES.forEach(cy => {
+    const btn = document.createElement('button');
+    btn.className = 'compare-chip';
+    btn.dataset.cycle = cy;
+    btn.setAttribute('aria-pressed', cmpState.cycles.has(cy));
+    btn.style.borderColor = c(cycleColors[cy]);
+    btn.innerHTML = `<span style="width:9px;height:9px;border-radius:50%;display:inline-block;background:${c(cycleColors[cy])}"></span>${CYCLE_LABELS[cy]}`;
+    btn.addEventListener('click', () => {
+      if (cmpState.cycles.has(cy)) { if (cmpState.cycles.size > 1) cmpState.cycles.delete(cy); }
+      else cmpState.cycles.add(cy);
+      btn.setAttribute('aria-pressed', cmpState.cycles.has(cy));
+      cmpRender();
+    });
+    cRow.appendChild(btn);
+  });
+
+  // Descriptors row (grouped by family)
+  const dRow = document.getElementById('cmp-desc-row');
+  let lastFam = null;
+  DESCRIPTORS.forEach((d, idx) => {
+    if (d.family !== lastFam) {
+      if (lastFam !== null) {
+        const sep = document.createElement('span');
+        sep.style.cssText = 'color:var(--border);margin:0 0.2rem;user-select:none';
+        sep.textContent = '|';
+        dRow.appendChild(sep);
+      }
+      const tag = document.createElement('span');
+      tag.style.cssText = 'color:var(--muted);font-size:0.72rem;margin-right:0.2rem';
+      tag.textContent = d.family + ':';
+      dRow.appendChild(tag);
+      lastFam = d.family;
+    }
+    const btn = document.createElement('button');
+    btn.className = 'compare-chip';
+    btn.dataset.desc = d.key;
+    btn.setAttribute('aria-pressed', cmpState.descriptors.has(d.key));
+    btn.textContent = d.label;
+    btn.addEventListener('click', () => {
+      if (cmpState.descriptors.has(d.key)) cmpState.descriptors.delete(d.key);
+      else cmpState.descriptors.add(d.key);
+      btn.setAttribute('aria-pressed', cmpState.descriptors.has(d.key));
+      cmpRender();
+    });
+    dRow.appendChild(btn);
+  });
+
+  document.getElementById('cmp-pes').addEventListener('click', (e) => {
+    cmpState.showPES = !cmpState.showPES;
+    e.currentTarget.setAttribute('aria-pressed', cmpState.showPES);
+    cmpRender();
+  });
+  document.getElementById('cmp-normalize').addEventListener('click', (e) => {
+    cmpState.normalize = !cmpState.normalize;
+    e.currentTarget.setAttribute('aria-pressed', cmpState.normalize);
+    cmpRender();
+  });
+  document.getElementById('cmp-clear').addEventListener('click', () => {
+    cmpState.descriptors.clear();
+    document.querySelectorAll('[data-desc]').forEach(b => b.setAttribute('aria-pressed', 'false'));
+    cmpRender();
+  });
+  document.getElementById('cmp-download').addEventListener('click', cmpDownload);
+}
+
+let cmpChart;
+function cmpInit() {
+  const ctx = document.getElementById('compare-chart').getContext('2d');
+  cmpChart = new Chart(ctx, {
+    type: 'line',
+    data: { datasets: [] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      animation: { duration: 150 },
+      interaction: { mode: 'nearest', axis: 'x', intersect: false },
+      scales: {
+        x: { type: 'linear', min: -8, max: 6, ticks: { stepSize: 2 },
+             title: { display: true, text: 's (amu½·bohr)' },
+             grid: { color: 'rgba(127,127,127,0.10)' } },
+        y: { title: { display: true, text: 'Valeur (normalisée [0,1])' },
+             grid: { color: 'rgba(127,127,127,0.12)' } },
+        yPES: { display: false, position: 'right',
+                title: { display: false, text: 'ΔE (kcal/mol)' },
+                grid: { drawOnChartArea: false } },
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => ctx.dataset._tooltip ? ctx.dataset._tooltip(ctx) : `${ctx.parsed.y.toFixed(3)}`,
+          },
+        },
+      },
+    },
+  });
+}
+
+function cmpRender() {
+  if (!cmpChart) return;
+  const datasets = [];
+
+  // PES en arrière-plan
+  if (cmpState.showPES) {
+    datasets.push({
+      label: 'PES (background)',
+      data: pesPoints.map(p => ({ x: p.s, y: p.dE })),
+      borderColor: 'rgba(127,127,127,0.45)',
+      backgroundColor: 'rgba(127,127,127,0.10)',
+      borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 0,
+      tension: 0.25, yAxisID: 'yPES',
+      _tooltip: (ctx) => `PES : ΔE = ${ctx.parsed.y.toFixed(2)} kcal/mol`,
+    });
+  }
+  cmpChart.options.scales.yPES.display = cmpState.showPES;
+
+  // Compute X coords from STATIONARY (in order)
+  const xs = STATIONARY.map(sp => sp.s);
+  const labels = STATIONARY.map(sp => sp.key);
+
+  // For each active descriptor, gather raw values
+  const series = [];
+  const descArr = [...cmpState.descriptors];
+  descArr.forEach((descKey, idx) => {
+    const d = DESCRIPTORS.find(x => x.key === descKey);
+    if (!d) return;
+    const raw = STATIONARY.map(sp => cmpValueAt(descKey, sp.key));
+    series.push({ key: descKey, label: d.label, family: d.family, raw, color: cmpColor(idx) });
+  });
+
+  if (series.length === 0) {
+    cmpChart.data.datasets = datasets;
+    cmpChart.update();
+    cmpBuildLegend(series);
+    return;
+  }
+
+  // Normaliser ou non
+  let plotted;
+  if (cmpState.normalize) {
+    plotted = series.map(s => {
+      const finite = s.raw.filter(v => Number.isFinite(v));
+      const lo = Math.min(...finite), hi = Math.max(...finite);
+      const range = hi - lo || 1;
+      return {
+        ...s,
+        norm: s.raw.map(v => Number.isFinite(v) ? (v - lo) / range : null),
+        range: [lo, hi],
+      };
+    });
+  } else {
+    plotted = series.map(s => ({ ...s, norm: s.raw, range: null }));
+  }
+
+  // Émission des datasets
+  plotted.forEach(s => {
+    const data = xs.map((x, i) => ({ x, y: s.norm[i] }));
+    datasets.push({
+      label: s.label,
+      data,
+      borderColor: s.color, backgroundColor: s.color,
+      borderWidth: 2, pointRadius: 4, pointHoverRadius: 6, pointStyle: 'circle',
+      tension: 0.15, spanGaps: true, yAxisID: 'y',
+      _tooltip: (ctx) => {
+        const i = ctx.dataIndex;
+        const rawVal = s.raw[i];
+        const rawStr = Number.isFinite(rawVal) ? rawVal.toFixed(3) : '—';
+        const lbl = labels[i] || '';
+        if (cmpState.normalize && s.range) {
+          return `${s.label} @ ${lbl} = ${rawStr}  (norm: ${(ctx.parsed.y * 100).toFixed(0)}%, range [${s.range[0].toFixed(2)}, ${s.range[1].toFixed(2)}])`;
+        }
+        return `${s.label} @ ${lbl} = ${rawStr}`;
+      },
+    });
+  });
+
+  // Y axis title
+  cmpChart.options.scales.y.title.text = cmpState.normalize ? 'Valeur normalisée [0, 1]' : 'Valeur brute';
+  // Auto-fit Y range
+  if (cmpState.normalize) {
+    cmpChart.options.scales.y.min = -0.05; cmpChart.options.scales.y.max = 1.05;
+  } else {
+    delete cmpChart.options.scales.y.min; delete cmpChart.options.scales.y.max;
+  }
+
+  cmpChart.data.datasets = datasets;
+  cmpChart.update();
+  cmpBuildLegend(plotted);
+}
+
+function cmpBuildLegend(series) {
+  const root = document.getElementById('compare-legend');
+  root.innerHTML = '';
+  if (cmpState.showPES) {
+    const it = document.createElement('span');
+    it.className = 'compare-legend-item';
+    it.style.color = 'rgba(127,127,127,0.8)';
+    it.innerHTML = `<span class="compare-legend-stroke"></span><span style="color:var(--text)">PES (arrière-plan, axe Y droit)</span>`;
+    root.appendChild(it);
+  }
+  series.forEach(s => {
+    const it = document.createElement('span');
+    it.className = 'compare-legend-item';
+    it.style.color = s.color;
+    const rangeStr = s.range ? ` <small style="color:var(--muted)">[${s.range[0].toFixed(2)}, ${s.range[1].toFixed(2)}]</small>` : '';
+    it.innerHTML = `<span class="compare-legend-stroke"></span><span style="color:var(--text)">${s.label}${rangeStr}</span>`;
+    root.appendChild(it);
+  });
+  if (!series.length && !cmpState.showPES) {
+    root.innerHTML = `<span style="color:var(--muted)">Aucun descripteur ni PES sélectionné.</span>`;
+  } else if (!series.length) {
+    const it = document.createElement('span');
+    it.style.color = 'var(--muted)';
+    it.textContent = 'Coche des descripteurs ci-dessus pour les superposer.';
+    root.appendChild(it);
+  }
+}
+
+async function cmpDownload() {
+  if (!cmpChart) return;
+  const DPR = Math.max(1, window.devicePixelRatio || 1);
+  const F_TITLE = 30;
+  const F_SUB   = Math.round(13 * DPR);
+  const margin  = Math.round(24 * DPR);
+  const lineGap = Math.round(7 * DPR);
+  const titleH = F_TITLE + F_SUB * 2 + lineGap * 3 + Math.round(8 * DPR);
+  const legendGap = Math.round(10 * DPR);
+
+  const chartImg = await new Promise(r => {
+    const i = new Image();
+    i.onload = () => r(i);
+    i.src = cmpChart.toBase64Image('image/png', 1);
+  });
+
+  const legendData = await captureHtmlAsImage(
+    document.getElementById('compare-legend'),
+    chartImg.naturalWidth, DPR
+  );
+  const legendH = legendData ? legendData.height : 0;
+
+  const out = document.createElement('canvas');
+  out.width  = chartImg.naturalWidth + margin * 2;
+  out.height = chartImg.naturalHeight + margin * 2 + titleH + (legendH ? legendH + legendGap : 0);
+  const ctx = out.getContext('2d');
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillRect(0, 0, out.width, out.height);
+  ctx.textBaseline = 'top';
+  let y = margin;
+  ctx.fillStyle = '#1A1A1A';
+  ctx.font = 'bold ' + F_TITLE + 'px -apple-system, "Segoe UI", Arial, sans-serif';
+  ctx.fillText(EXPORT_TITLE + ' — Compare panel', margin, y);
+  y += F_TITLE + lineGap;
+  ctx.font = F_SUB + 'px -apple-system, "Segoe UI", Arial, sans-serif';
+  ctx.fillStyle = '#6B6B6B';
+  ctx.fillText('Method : ' + EXPORT_METHOD, margin, y);
+  y += F_SUB + lineGap;
+  const cmpDescLabels = [...cmpState.descriptors].map(k => DESCRIPTORS.find(d => d.key === k)?.label || k).join(', ');
+  const cmpCfg = `Cycles : ${[...cmpState.cycles].sort().join('+')}  ·  Descripteurs : ${cmpDescLabels || '—'}  ·  ${cmpState.normalize ? 'normalisé [0,1]' : 'valeurs brutes'}${cmpState.showPES ? '  ·  PES bg' : ''}`;
+  ctx.fillText('Config : ' + cmpCfg, margin, y);
+
+  ctx.drawImage(chartImg, margin, margin + titleH);
+  if (legendData) {
+    ctx.drawImage(legendData.img, margin, margin + titleH + chartImg.naturalHeight + legendGap);
+  }
+  const slug = EXPORT_SLUG + '_compare_' + new Date().toISOString().slice(0, 10);
+  const link = document.createElement('a');
+  link.download = slug + '.png';
+  link.href = out.toDataURL('image/png');
+  link.click();
+}
+
+cmpBuildToolbar();
+cmpInit();
+cmpRender();
 
 // ============================================================
 // 11) DOWNLOAD PNG (titre + méthode + état actif compositionnés)
