@@ -189,7 +189,8 @@ footer { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--bord
       <span class="label">Descripteurs</span>
     </div>
     <div class="compare-row">
-      <span class="label">Actions</span>
+      <span class="label">Options</span>
+      <button class="compare-chip" id="grid-pes" aria-pressed="true" title="Afficher la courbe PES en arrière-plan de chaque mini-graphe (axe Y droit en kcal/mol)">PES en arrière-plan</button>
       <button class="compare-chip" id="grid-preset-aroma" title="Sélection rapide HOMA / HOMA TOTAL / NICSiso / NICSzz local">Preset aromaticité</button>
       <button class="compare-chip" id="grid-clear">Tout désélectionner</button>
     </div>
@@ -947,7 +948,7 @@ function cmpInit() {
         y: { title: { display: true, text: 'Valeur (normalisée [0,1])' },
              grid: { color: 'rgba(127,127,127,0.12)' } },
         yPES: { display: false, position: 'right',
-                title: { display: false, text: 'ΔE (kcal/mol)' },
+                title: { display: true, text: 'ΔE (kcal/mol)', font: { size: 12 } },
                 grid: { drawOnChartArea: false } },
       },
       plugins: {
@@ -1145,6 +1146,7 @@ cmpRender();
 const gridState = {
   cycles: new Set(['A', 'B', 'AB']),
   descriptors: new Set(['HOMA', 'NICS_iso', 'NICS_zz_loc']),  // 3 par défaut
+  showPES: true,                                                // PES en arrière-plan
 };
 const gridCharts = {};  // descKey → Chart instance
 
@@ -1217,6 +1219,11 @@ function gridBuildToolbar() {
     dRow.appendChild(btn);
   });
 
+  document.getElementById('grid-pes').addEventListener('click', (e) => {
+    gridState.showPES = !gridState.showPES;
+    e.currentTarget.setAttribute('aria-pressed', gridState.showPES);
+    gridRender();
+  });
   document.getElementById('grid-preset-aroma').addEventListener('click', () => {
     gridState.descriptors = new Set(['HOMA', 'HOMA_TOTAL', 'NICS_iso', 'NICS_zz_loc']);
     document.querySelectorAll('[data-grid-desc]').forEach(b => {
@@ -1286,29 +1293,41 @@ function gridRender() {
     const markerRadii  = STATIONARY.map(sp => sp.key === 'TS' ? 8 : (sp.intermediate ? 4 : 6));
 
     const ctx = document.getElementById('grid-chart-' + idx).getContext('2d');
+    // Build datasets: PES background (if active) first, then descriptor line, then markers
+    const miniDatasets = [];
+    if (gridState.showPES) {
+      miniDatasets.push({
+        label: '_pes',
+        data: pesPoints.map(p => ({ x: p.s, y: p.dE })),
+        borderColor: 'rgba(127,127,127,0.45)',
+        backgroundColor: 'rgba(127,127,127,0.08)',
+        borderWidth: 1.2, pointRadius: 0, pointHoverRadius: 0,
+        tension: 0.25, yAxisID: 'yPES', order: 10,
+      });
+    }
+    miniDatasets.push({
+      label: d.label,
+      data: pts,
+      borderColor: titleColor,
+      backgroundColor: titleColor,
+      borderWidth: 2, pointRadius: 0, pointHoverRadius: 0,
+      tension: 0.15, spanGaps: true, yAxisID: 'y', order: 5,
+    });
+    miniDatasets.push({
+      label: '_markers',
+      data: markerData,
+      type: 'scatter',
+      showLine: false,
+      pointStyle: markerStyles,
+      pointRadius: markerRadii,
+      pointHoverRadius: markerRadii.map(r => r + 2),
+      backgroundColor: markerColors,
+      borderColor: markerBorders,
+      borderWidth: 1.5, yAxisID: 'y',
+    });
     gridCharts[descKey] = new Chart(ctx, {
       type: 'line',
-      data: {
-        datasets: [{
-          label: d.label,
-          data: pts,
-          borderColor: titleColor,
-          backgroundColor: titleColor,
-          borderWidth: 2, pointRadius: 0, pointHoverRadius: 0,
-          tension: 0.15, spanGaps: true,
-        }, {
-          label: '_markers',
-          data: markerData,
-          type: 'scatter',
-          showLine: false,
-          pointStyle: markerStyles,
-          pointRadius: markerRadii,
-          pointHoverRadius: markerRadii.map(r => r + 2),
-          backgroundColor: markerColors,
-          borderColor: markerBorders,
-          borderWidth: 1.5,
-        }],
-      },
+      data: { datasets: miniDatasets },
       options: {
         responsive: true, maintainAspectRatio: false,
         animation: { duration: 100 },
@@ -1321,6 +1340,10 @@ function gridRender() {
           y: { ticks: { font: { size: 10 } },
                title: { display: true, text: d.label, font: { size: 10 }, padding: { top: 0, bottom: 2 } },
                grid: { color: 'rgba(127,127,127,0.10)' } },
+          yPES: { display: gridState.showPES, position: 'right',
+                  ticks: { font: { size: 9 }, color: 'rgba(127,127,127,0.7)' },
+                  title: { display: gridState.showPES, text: 'ΔE (kcal/mol)', font: { size: 9 }, color: 'rgba(127,127,127,0.7)' },
+                  grid: { drawOnChartArea: false } },
         },
         plugins: {
           legend: { display: false },
@@ -1328,6 +1351,9 @@ function gridRender() {
             callbacks: {
               label: (ctx) => {
                 const v = ctx.parsed.y;
+                if (ctx.dataset.label === '_pes') {
+                  return `PES : ΔE = ${Number.isFinite(v) ? v.toFixed(2) : '—'} kcal/mol`;
+                }
                 const lbl = ctx.dataset.label === '_markers'
                   ? STATIONARY[ctx.dataIndex].key
                   : 'point';
