@@ -191,6 +191,7 @@ footer { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--bord
     <div class="compare-row">
       <span class="label">Options</span>
       <button class="compare-chip" id="grid-pes" aria-pressed="true" title="Afficher la courbe PES en arrière-plan de chaque mini-graphe (axe Y droit en kcal/mol)">PES en arrière-plan</button>
+      <button class="compare-chip" id="grid-separate" aria-pressed="false" title="Pour chaque descripteur per-cycle, créer un mini-graphe distinct par cycle actif (sinon : moyenne des cycles)">Séparer par cycle</button>
       <button class="compare-chip" id="grid-preset-aroma" title="Sélection rapide HOMA / HOMA TOTAL / NICSiso / NICSzz local">Preset aromaticité</button>
       <button class="compare-chip" id="grid-clear">Tout désélectionner</button>
     </div>
@@ -1147,17 +1148,22 @@ const gridState = {
   cycles: new Set(['A', 'B', 'AB']),
   descriptors: new Set(['HOMA', 'NICS_iso', 'NICS_zz_loc']),  // 3 par défaut
   showPES: true,                                                // PES en arrière-plan
+  separateByCycle: false,                                       // 1 mini-graphe par cycle pour les per-cycle
 };
 const gridCharts = {};  // descKey → Chart instance
 
-function gridValueAt(descKey, pointKey) {
-  // Same aggregation rule as compare panel: per-cycle → moyenne, global → direct
+function gridValueAt(descKey, pointKey, cycleOverride) {
+  // Per-cycle → moyenne des cycles actifs, OU valeur d'un seul cycle si cycleOverride. Global → direct.
   const d = DESCRIPTORS.find(x => x.key === descKey);
   if (!d) return null;
   const entry = DESC[pointKey];
   if (!entry) return null;
   if (d.global) {
     const v = entry._global?.[descKey];
+    return Number.isFinite(v) ? v : null;
+  }
+  if (cycleOverride) {
+    const v = entry[cycleOverride]?.[descKey];
     return Number.isFinite(v) ? v : null;
   }
   const vals = [];
@@ -1224,6 +1230,11 @@ function gridBuildToolbar() {
     e.currentTarget.setAttribute('aria-pressed', gridState.showPES);
     gridRender();
   });
+  document.getElementById('grid-separate').addEventListener('click', (e) => {
+    gridState.separateByCycle = !gridState.separateByCycle;
+    e.currentTarget.setAttribute('aria-pressed', gridState.separateByCycle);
+    gridRender();
+  });
   document.getElementById('grid-preset-aroma').addEventListener('click', () => {
     gridState.descriptors = new Set(['HOMA', 'HOMA_TOTAL', 'NICS_iso', 'NICS_zz_loc']);
     document.querySelectorAll('[data-grid-desc]').forEach(b => {
@@ -1252,16 +1263,30 @@ function gridRender() {
     return;
   }
 
-  activeKeys.forEach((descKey, idx) => {
+  // Build card specs: per-cycle descriptors may be split into N cards when separateByCycle is on
+  const cardSpecs = [];
+  const sortedCycles = [...gridState.cycles].sort();
+  activeKeys.forEach((descKey) => {
     const d = DESCRIPTORS.find(x => x.key === descKey);
     if (!d) return;
+    if (d.global || !gridState.separateByCycle) {
+      cardSpecs.push({ descKey, d, cycle: null });
+    } else {
+      sortedCycles.forEach(cy => cardSpecs.push({ descKey, d, cycle: cy }));
+    }
+  });
+
+  cardSpecs.forEach((spec, idx) => {
+    const { descKey, d, cycle } = spec;
     const card = document.createElement('div');
     card.className = 'grid-card';
-    const titleColor = cmpColor(idx);
+    const titleColor = cycle ? c(cycleColors[cycle]) : cmpColor(idx);
+    const titleLabel = cycle ? `${d.label} <span style="color:var(--muted);font-weight:400;font-size:0.85em">— ${CYCLE_LABELS[cycle]}</span>` : d.label;
+    const subtitle = d.family + (d.global ? ' · global' : (cycle ? ` · ${CYCLE_LABELS[cycle]}` : ' · moy. cycles actifs'));
     card.innerHTML = `
       <div class="grid-card-title">
-        <span style="color:${titleColor}">${d.label}</span>
-        <span class="grid-card-family">${d.family}${d.global ? ' · global' : ' · moy. cycles actifs'}</span>
+        <span style="color:${titleColor}">${titleLabel}</span>
+        <span class="grid-card-family">${subtitle}</span>
       </div>
       <div class="grid-card-canvas-wrap"><canvas id="grid-chart-${idx}"></canvas></div>
     `;
@@ -1269,14 +1294,14 @@ function gridRender() {
 
     // Build per-descriptor mini chart
     const pts = STATIONARY.map(sp => {
-      const v = gridValueAt(descKey, sp.key);
+      const v = gridValueAt(descKey, sp.key, cycle);
       return { x: sp.s, y: v, _key: sp.key, _intermediate: !!sp.intermediate };
     });
 
     // Stationary markers (Reactant/TS/Product as colored)
     const markerData = STATIONARY.map(sp => ({
       x: sp.s,
-      y: gridValueAt(descKey, sp.key),
+      y: gridValueAt(descKey, sp.key, cycle),
       _name: sp.key,
     }));
     const markerColors = STATIONARY.map(sp => {
@@ -1325,7 +1350,8 @@ function gridRender() {
       borderColor: markerBorders,
       borderWidth: 1.5, yAxisID: 'y',
     });
-    gridCharts[descKey] = new Chart(ctx, {
+    const chartKey = cycle ? `${descKey}__${cycle}` : descKey;
+    gridCharts[chartKey] = new Chart(ctx, {
       type: 'line',
       data: { datasets: miniDatasets },
       options: {
@@ -1379,19 +1405,26 @@ async function gridDownload() {
   const cardGap = Math.round(12 * DPR);
   const cardTitleH = F_CARD_TITLE + Math.round(10 * DPR);
 
-  // Capture all mini charts as images
+  // Capture all mini charts as images (gridCharts insertion order = visual order)
   const cards = [];
-  for (const descKey of gridState.descriptors) {
-    const ch = gridCharts[descKey];
+  let cardIdx = 0;
+  for (const [chartKey, ch] of Object.entries(gridCharts)) {
     if (!ch) continue;
+    const sep = chartKey.indexOf('__');
+    const descKey = sep >= 0 ? chartKey.slice(0, sep) : chartKey;
+    const cycle   = sep >= 0 ? chartKey.slice(sep + 2) : null;
     const d = DESCRIPTORS.find(x => x.key === descKey);
+    if (!d) continue;
     const img = await new Promise(r => {
       const i = new Image();
       i.onload = () => r(i);
       i.src = ch.toBase64Image('image/png', 1);
     });
-    cards.push({ descKey, label: d.label, family: d.family + (d.global ? ' · global' : ' · moy. cycles actifs'),
-                 img, color: cmpColor([...gridState.descriptors].indexOf(descKey)) });
+    const label = cycle ? `${d.label} — ${CYCLE_LABELS[cycle]}` : d.label;
+    const family = d.family + (d.global ? ' · global' : (cycle ? ` · ${CYCLE_LABELS[cycle]}` : ' · moy. cycles actifs'));
+    const color  = cycle ? c(cycleColors[cycle]) : cmpColor(cardIdx);
+    cards.push({ chartKey, label, family, img, color });
+    cardIdx++;
   }
   if (!cards.length) return;
 
@@ -1421,7 +1454,7 @@ async function gridDownload() {
   ctx.fillStyle = '#6B6B6B';
   ctx.fillText('Method : ' + EXPORT_METHOD, margin, y);
   y += F_SUB + lineGap;
-  const cfg = `Cycles : ${[...gridState.cycles].sort().join('+')}  ·  ${cards.length} mini-graphes`;
+  const cfg = `Cycles : ${[...gridState.cycles].sort().join('+')}  ·  ${cards.length} mini-graphes${gridState.separateByCycle ? '  ·  séparés par cycle' : ''}`;
   ctx.fillText('Config : ' + cfg, margin, y);
 
   // Draw cards
